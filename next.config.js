@@ -6,6 +6,7 @@ const nextConfig = {
   },
   basePath: '/StockPortfolio',
   assetPrefix: '/StockPortfolio/',
+  trailingSlash: true
 }
 
-export default nextConfig
+module.exports = nextConfig
