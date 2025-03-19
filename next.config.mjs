@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
-const config = {
-  /* config options here */
-};
+const nextConfig = {
+  output: 'export',
+  images: {
+    unoptimized: true,
+  },
+  basePath: '/StockPortfolio',
+  assetPrefix: '/StockPortfolio/',
+}
 
-export default config;
+export default nextConfig
