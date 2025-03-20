@@ -112,7 +112,7 @@ const formatNumber = (num: number) => {
 
 export default function Holdings() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'unrealizedPL', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'alphabetical', direction: 'asc' });
   const [indices, setIndices] = useState<MarketIndex[]>([
     { name: 'SENSEX', value: 0, change: 0, changePercent: 0, isStale: true },
     { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0, isStale: true }
