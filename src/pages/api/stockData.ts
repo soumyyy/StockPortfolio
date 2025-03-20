@@ -20,7 +20,7 @@ const HOLDINGS_DATA = [
   { ticker: "HAL", averagePrice: 2906.25, quantity: 60 },
   { ticker: "HFCL", averagePrice: 117.43, quantity: 600 },
   { ticker: "HSCL", averagePrice: 338.35, quantity: 200 },
-  { ticker: "SAMMAANCAP", averagePrice: 157.5, quantity: 400 },
+  { ticker: "SAMMAANCAP", averagePrice: 142.40, quantity: 600 },
   { ticker: "IDBI", averagePrice: 64.18, quantity: 80 },
   { ticker: "IDEA", averagePrice: 12.68, quantity: 9000 },
   { ticker: "INDUSINDBK", averagePrice: 693.3, quantity: 20 },
