@@ -3,6 +3,7 @@ import HoldingCard from '../components/HoldingCard';
 import PortfolioSummary from '../components/PortfolioSummary';
 import { Holding } from '../types/holding';
 import MarketIndices from '../components/MarketIndices';
+import Link from 'next/link';
 
 type SortOption = 'unrealizedPL' | 'dailyChangePercentage' | 'alphabetical';
 
@@ -22,90 +23,78 @@ interface MarketIndex {
 
 function LoadingSkeleton() {
   return (
-    <div className="space-y-4">
-      {/* Portfolio Summary Skeleton */}
-      <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
-          <div className="space-y-1">
-            <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-            <div className="h-7 w-32 bg-white/[0.06] rounded animate-pulse" />
-            <div className="h-4 w-28 bg-white/[0.06] rounded animate-pulse" />
-          </div>
-          <div className="space-y-1">
-            <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-            <div className="h-7 w-32 bg-white/[0.06] rounded animate-pulse" />
-            <div className="h-4 w-28 bg-white/[0.06] rounded animate-pulse" />
-          </div>
-          <div className="space-y-1">
-            <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-            <div className="h-7 w-32 bg-white/[0.06] rounded animate-pulse" />
-            <div className="h-4 w-28 bg-white/[0.06] rounded animate-pulse" />
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6">
+      <div className="max-w-5xl mx-auto px-4">
 
-      {/* Market Data Section Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Market Indices Skeleton */}
-        <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-2">
-          <div className="flex items-center justify-between mb-2">
-            <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-          </div>
-          <div className="space-y-1">
-            {[...Array(2)].map((_, i) => (
-              <div key={i} className="bg-white/[0.03] rounded border border-white/[0.06] p-2">
-                <div className="flex items-center justify-between">
-                  <div className="h-4 w-20 bg-white/[0.06] rounded animate-pulse" />
-                  <div className="h-4 w-16 bg-white/[0.06] rounded animate-pulse" />
-                </div>
-                <div className="mt-0.5 flex items-baseline gap-1">
-                  <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-                  <div className="h-4 w-16 bg-white/[0.06] rounded animate-pulse" />
-                </div>
+        <div className="space-y-6">
+          {/* Market Indices */}
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-3.5 animate-pulse">
+                <div className="h-4 w-24 bg-white/10 rounded mb-2"></div>
+                <div className="h-6 w-32 bg-white/10 rounded"></div>
               </div>
             ))}
           </div>
-        </div>
 
-        {/* Market Movers Skeleton */}
-        <div className="space-y-2">
-          <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-2">
-            <div className="flex items-center justify-between mb-2">
-              <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-            </div>
-            <div className="space-y-1">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="bg-white/[0.03] rounded border border-white/[0.06] p-2">
-                  <div className="flex items-center justify-between">
-                    <div className="h-4 w-20 bg-white/[0.06] rounded animate-pulse" />
-                    <div className="h-4 w-16 bg-white/[0.06] rounded animate-pulse" />
-                  </div>
-                  <div className="mt-0.5 flex items-baseline gap-1">
-                    <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-                    <div className="h-4 w-16 bg-white/[0.06] rounded animate-pulse" />
+          {/* Portfolio Summary Skeleton */}
+          <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3 w-20 bg-white/10 rounded animate-pulse"></div>
+                  <div className="h-5 w-32 bg-white/10 rounded animate-pulse"></div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-14 bg-white/10 rounded animate-pulse"></div>
+                    <div className="h-3 w-20 bg-white/10 rounded animate-pulse"></div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Holdings Table Skeleton */}
-      <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-4">
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-white/[0.03] rounded border border-white/[0.06] p-3">
-              <div className="flex items-center justify-between">
-                <div className="h-4 w-32 bg-white/[0.06] rounded animate-pulse" />
-                <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
-              </div>
-              <div className="mt-2 flex items-center justify-between">
-                <div className="h-4 w-28 bg-white/[0.06] rounded animate-pulse" />
-                <div className="h-4 w-20 bg-white/[0.06] rounded animate-pulse" />
-              </div>
+          {/* Holdings List Skeleton */}
+          <div className="space-y-3">
+            {/* Sort Controls Skeleton */}
+            <div className="flex justify-end">
+              <div className="h-8 w-32 bg-white/[0.03] rounded animate-pulse"></div>
             </div>
-          ))}
+
+            {/* Holdings Cards */}
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-4">
+                  <div className="flex flex-col space-y-3">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="h-5 w-32 bg-white/10 rounded animate-pulse"></div>
+                        <div className="h-4 w-24 bg-white/10 rounded animate-pulse"></div>
+                      </div>
+                      <div className="text-right">
+                        <div className="h-5 w-24 bg-white/10 rounded animate-pulse mb-1"></div>
+                        <div className="h-4 w-20 bg-white/10 rounded animate-pulse"></div>
+                      </div>
+                    </div>
+                    
+                    {/* Details (initially hidden) */}
+                    <div className="pt-3 border-t border-white/[0.06] hidden">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <div className="h-4 w-20 bg-white/10 rounded animate-pulse"></div>
+                          <div className="h-5 w-28 bg-white/10 rounded animate-pulse"></div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="h-4 w-20 bg-white/10 rounded animate-pulse"></div>
+                          <div className="h-5 w-28 bg-white/10 rounded animate-pulse"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -221,6 +210,14 @@ export default function Holdings() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] p-4 text-sm">
       <div className="max-w-5xl mx-auto space-y-4">
+        <div className="mb-4">
+          <Link href="/" className="inline-flex items-center text-sm text-white/70 hover:text-white/90 transition-colors">
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </Link>
+        </div>
         {isLoading ? (
           <LoadingSkeleton />
         ) : (
