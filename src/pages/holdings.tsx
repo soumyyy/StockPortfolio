@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import HoldingCard from '../components/HoldingCard';
 import PortfolioSummary from '../components/PortfolioSummary';
 import { Holding } from '../types/holding';
@@ -119,6 +119,24 @@ export default function Holdings() {
   ]);
   const [isLoading, setIsLoading] = useState(true);
   const [indicesError, setIndicesError] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle search toggle
+  const toggleSearch = () => {
+    setShowSearch(!showSearch);
+    if (!showSearch && searchInputRef.current) {
+      // Focus the input when search bar appears
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  };
+
+  // Filter holdings based on search
+  const filteredHoldings = holdings.filter(holding => 
+    holding.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    holding.ticker.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   useEffect(() => {
     const fetchIndicesData = async () => {
@@ -189,88 +207,151 @@ export default function Holdings() {
     };
   }, []);
 
-  const sortedHoldings = [...holdings].sort((a, b) => {
-    switch (sortConfig.key) {
-      case 'unrealizedPL':
-        return sortConfig.direction === 'asc' ? a.unrealizedPL - b.unrealizedPL : b.unrealizedPL - a.unrealizedPL;
-      case 'dailyChangePercentage':
-        return sortConfig.direction === 'asc' ? a.dailyChangePercentage - b.dailyChangePercentage : b.dailyChangePercentage - a.dailyChangePercentage;
-      case 'alphabetical':
-        return sortConfig.direction === 'asc' ? a.ticker.localeCompare(b.ticker) : b.ticker.localeCompare(a.ticker);
-      default:
-        return 0;
-    }
-  });
-
   const gainers = holdings.filter(stock => stock.unrealizedPLPercentage > 0).length;
   const losers = holdings.filter(stock => stock.unrealizedPLPercentage < 0).length;
   const topGainer = [...holdings].sort((a, b) => b.unrealizedPLPercentage - a.unrealizedPLPercentage)[0];
   const topLoser = [...holdings].sort((a, b) => a.unrealizedPLPercentage - b.unrealizedPLPercentage)[0];
 
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] p-4 text-sm">
-      <div className="max-w-5xl mx-auto space-y-4">
+  return isLoading ? <LoadingSkeleton /> : (
+    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6">
+      <div className="max-w-5xl mx-auto px-4 space-y-6">
         <div className="mb-4">
           <Link href="/" className="inline-flex items-center text-sm text-white/70 hover:text-white/90 transition-colors">
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back
+            Home
           </Link>
         </div>
-        {isLoading ? (
-          <LoadingSkeleton />
-        ) : (
-          <>
-            <MarketIndices/>
-            {/* Portfolio Summary and Holdings List */}
-            <PortfolioSummary holdings={holdings} />
-
-            <div className="mt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs font-medium text-white/60">Holdings</h2>
-                <div className="flex rounded-md overflow-hidden border border-white/[0.06]">
+        <MarketIndices indices={indices} error={indicesError} />
+        <PortfolioSummary holdings={holdings} />
+        
+        {/* Holdings Section Header */}
+        <div className="flex items-center justify-between">
+          <div className={`flex items-center gap-4 ${showSearch ? 'w-full sm:w-auto' : ''}`}>
+            <h2 className={`text-xs font-medium text-white/60 ${showSearch ? 'hidden sm:block' : 'block'}`}>Holdings</h2>
+            {/* Search Bar */}
+            <div className={`flex-1 sm:flex-initial transition-all duration-300 ease-in-out transform origin-right ${
+              showSearch ? 'w-full sm:w-48 opacity-100 scale-x-100' : 'w-0 opacity-0 scale-x-0'
+            } overflow-hidden`}>
+              <div className="relative w-full">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search stocks..."
+                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:border-white/20 placeholder:text-white/40"
+                />
+                {showSearch && (
                   <button
-                    onClick={() => setSortConfig({ key: 'alphabetical', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
-                    className={`px-3 py-1.5 text-[11px] transition-all ${
-                      sortConfig.key === 'alphabetical'
-                        ? 'bg-white/[0.06] text-white/90'
-                        : 'text-white/50 hover:bg-white/[0.03]'
-                    }`}
+                    onClick={toggleSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-white/[0.03] rounded-lg transition-colors"
+                    aria-label="Close search"
                   >
-                    A-Z
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      className="w-4 h-4 text-white/60"
+                    >
+                      <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                    </svg>
                   </button>
-                  <button
-                    onClick={() => setSortConfig({ key: 'unrealizedPL', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
-                    className={`px-3 py-1.5 text-[11px] border-l border-white/[0.06] transition-all ${
-                      sortConfig.key === 'unrealizedPL'
-                        ? 'bg-white/[0.06] text-white/90'
-                        : 'text-white/50 hover:bg-white/[0.03]'
-                    }`}
-                  >
-                    P&L
-                  </button>
-                  <button
-                    onClick={() => setSortConfig({ key: 'dailyChangePercentage', direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
-                    className={`px-3 py-1.5 text-[11px] border-l border-white/[0.06] transition-all ${
-                      sortConfig.key === 'dailyChangePercentage'
-                        ? 'bg-white/[0.06] text-white/90'
-                        : 'text-white/50 hover:bg-white/[0.03]'
-                    }`}
-                  >
-                    Daily %
-                  </button>
-                </div>
-              </div>
-
-              <div className="divide-y divide-white/[0.08]">
-                {sortedHoldings.map((stock) => (
-                  <HoldingCard key={stock.ticker} stock={stock} />
-                ))}
+                )}
               </div>
             </div>
-          </>
-        )}
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Search Toggle Button */}
+            <button
+              onClick={toggleSearch}
+              className={`p-2 hover:bg-white/[0.03] rounded-lg transition-all duration-300 ease-in-out transform ${
+                showSearch ? 'hidden sm:block opacity-0 sm:opacity-100 scale-0 sm:scale-100' : 'block opacity-100 scale-100'
+              }`}
+              aria-label="Toggle search"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="w-5 h-5 text-white/60"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+            
+            {/* Sort Buttons */}
+            <div className={`flex h-8 rounded-md overflow-hidden border border-white/[0.06] transition-all duration-300 ease-in-out transform origin-right ${
+              showSearch ? 'hidden sm:flex opacity-0 sm:opacity-100 scale-x-0 sm:scale-x-100' : 'flex opacity-100 scale-x-100'
+            }`}>
+              <button
+                onClick={() => setSortConfig({ 
+                  key: 'alphabetical', 
+                  direction: sortConfig.key === 'alphabetical' && sortConfig.direction === 'asc' ? 'desc' : 'asc' 
+                })}
+                className={`h-full px-3 text-[11px] transition-all ${
+                  sortConfig.key === 'alphabetical'
+                    ? 'bg-white/[0.06] text-white/90'
+                    : 'text-white/50 hover:bg-white/[0.03]'
+                }`}
+              >
+                A-Z
+              </button>
+              <button
+                onClick={() => setSortConfig({ 
+                  key: 'unrealizedPL', 
+                  direction: sortConfig.key === 'unrealizedPL' && sortConfig.direction === 'asc' ? 'desc' : 'asc' 
+                })}
+                className={`h-full px-3 text-[11px] border-l border-white/[0.06] transition-all ${
+                  sortConfig.key === 'unrealizedPL'
+                    ? 'bg-white/[0.06] text-white/90'
+                    : 'text-white/50 hover:bg-white/[0.03]'
+                }`}
+              >
+                P&L
+              </button>
+              <button
+                onClick={() => setSortConfig({ 
+                  key: 'dailyChangePercentage', 
+                  direction: sortConfig.key === 'dailyChangePercentage' && sortConfig.direction === 'asc' ? 'desc' : 'asc' 
+                })}
+                className={`h-full px-3 text-[11px] border-l border-white/[0.06] transition-all ${
+                  sortConfig.key === 'dailyChangePercentage'
+                    ? 'bg-white/[0.06] text-white/90'
+                    : 'text-white/50 hover:bg-white/[0.03]'
+                }`}
+              >
+                Daily %
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Holdings List */}
+        <div className="space-y-3">
+          {filteredHoldings
+            .sort((a, b) => {
+              const direction = sortConfig.direction === 'asc' ? 1 : -1;
+              switch (sortConfig.key) {
+                case 'alphabetical':
+                  return direction * a.name.localeCompare(b.name);
+                case 'unrealizedPL':
+                  return direction * (a.unrealizedPL - b.unrealizedPL);
+                case 'dailyChangePercentage':
+                  return direction * (a.dailyChangePercentage - b.dailyChangePercentage);
+                default:
+                  return 0;
+              }
+            })
+            .map((holding) => (
+              <HoldingCard key={holding.ticker} holding={holding} />
+            ))}
+        </div>
       </div>
     </div>
   );

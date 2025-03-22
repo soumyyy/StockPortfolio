@@ -9,62 +9,12 @@ interface MarketIndex {
   lastUpdate?: string;
 }
 
-export default function MarketIndices() {
-  const [indices, setIndices] = useState<MarketIndex[]>([
-    { name: 'SENSEX', value: 0, change: 0, changePercent: 0, isStale: true },
-    { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0, isStale: true }
-  ]);
-  const [indicesError, setIndicesError] = useState(false);
+interface MarketIndicesProps {
+  indices: MarketIndex[];
+  error?: boolean;
+}
 
-  useEffect(() => {
-    const fetchIndicesData = async () => {
-      try {
-        const indicesResponse = await fetch('/api/indicesData');
-        if (!indicesResponse.ok) {
-          throw new Error(`Failed to fetch indices: ${indicesResponse.status}`);
-        }
-        
-        const indicesData = await indicesResponse.json();
-        if (!indicesData || !Array.isArray(indicesData) || indicesData.length < 2) {
-          throw new Error('Invalid indices data format');
-        }
-
-        setIndices([
-          {
-            name: 'SENSEX',
-            value: indicesData[0].value || 0,
-            change: indicesData[0].change || 0,
-            changePercent: indicesData[0].changePercent || 0,
-            lastUpdate: new Date().toISOString(),
-            isStale: false
-          },
-          {
-            name: 'NIFTY 50',
-            value: indicesData[1].value || 0,
-            change: indicesData[1].change || 0,
-            changePercent: indicesData[1].changePercent || 0,
-            lastUpdate: new Date().toISOString(),
-            isStale: false
-          }
-        ]);
-        setIndicesError(false);
-      } catch (error) {
-        console.error('Error fetching indices data:', error);
-        setIndicesError(true);
-        setIndices(prev => prev.map(index => ({
-          ...index,
-          isStale: true,
-          lastUpdate: new Date().toISOString()
-        })));
-      }
-    };
-
-    fetchIndicesData();
-    const intervalId = setInterval(fetchIndicesData, 300000); // 5 minutes
-
-    return () => clearInterval(intervalId);
-  }, []);
-
+export default function MarketIndices({ indices, error }: MarketIndicesProps) {
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('en-IN', {
       maximumFractionDigits: 2,
