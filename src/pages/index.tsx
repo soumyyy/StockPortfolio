@@ -260,7 +260,12 @@ export default function Home() {
   const toggleSearch = () => {
     setShowSearch(!showSearch);
     if (!showSearch) {
-      setTimeout(() => searchInputRef.current?.focus(), 100);
+      // Focus immediately and then again after a short delay to ensure it works on mobile
+      searchInputRef.current?.focus();
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+        searchInputRef.current?.click();
+      }, 50);
     } else {
       setSearchQuery('');
       setSearchResults([]);
@@ -394,7 +399,16 @@ export default function Home() {
           }
         `}</style>
 
-        <div className={`transition-all duration-300 space-y-6 ${showSearch ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+        <div 
+          className={`transition-all duration-300 space-y-6 ${showSearch && searchResults.length > 0 ? 'opacity-30 pointer-events-auto cursor-pointer' : 'opacity-100'}`}
+          onClick={() => {
+            if (showSearch && searchResults.length > 0) {
+              setShowSearch(false);
+              setSearchQuery('');
+              setSearchResults([]);
+            }
+          }}
+        >
           <MarketIndices indices={marketData.indices} error={false} />
           <div className="mt-6">
             <PortfolioSummary holdings={holdings} />
