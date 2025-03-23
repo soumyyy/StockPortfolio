@@ -282,7 +282,12 @@ export default function Home() {
               <div className="relative w-full">
                 <input
                   ref={searchInputRef}
-                  type="text"
+                  type="search"
+                  inputMode="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
                   value={searchQuery}
                   onChange={handleSearchInput}
                   onKeyDown={(e) => {
