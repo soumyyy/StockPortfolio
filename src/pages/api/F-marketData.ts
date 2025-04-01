@@ -16,8 +16,10 @@ interface MarketIndex {
   currency: string;
 }
 
-const GLOBAL_INDICES = [
+const GLOBAL_INDICES = [ 
   { symbol: '^DJI', name: 'Dow Jones' },
+  { symbol: 'YM=F', name: 'Dow Futures' },  // Dow Jones Futures
+  { symbol: '^NSEI', name: 'Nifty 50' },    // NSE Nifty 50 (using this instead of SGX Nifty as it's more reliable)
   { symbol: '^N225', name: 'Nikkei 225' },
   { symbol: '^FTSE', name: 'FTSE 100' },
   { symbol: '^GSPC', name: 'S&P 500' }
@@ -46,7 +48,7 @@ export default async function handler(
             price: quote.regularMarketPrice || 0,
             change: quote.regularMarketChange || 0,
             changePercent: quote.regularMarketChangePercent || 0,
-            currency: quote.currency || 'USD'
+            currency: quote.currency || (index.symbol === 'IN=F' ? 'INR' : 'USD')
           };
         } catch (error) {
           console.error(`Error fetching ${index.name}:`, error);
@@ -56,7 +58,7 @@ export default async function handler(
             price: 0,
             change: 0,
             changePercent: 0,
-            currency: 'USD'
+            currency: index.symbol === 'IN=F' ? 'INR' : 'USD'
           };
         }
       })
