@@ -19,7 +19,7 @@ interface MarketIndex {
 const GLOBAL_INDICES = [ 
   { symbol: '^DJI', name: 'Dow Jones' },
   { symbol: 'YM=F', name: 'Dow Futures' },  // Dow Jones Futures
-  { symbol: '^NSEI', name: 'Nifty 50' },    // NSE Nifty 50 (using this instead of SGX Nifty as it's more reliable)
+  { symbol: 'INR=X', name: 'USD/INR' },    // USD/INR exchange rate
   { symbol: '^N225', name: 'Nikkei 225' },
   { symbol: '^FTSE', name: 'FTSE 100' },
   { symbol: '^GSPC', name: 'S&P 500' }
