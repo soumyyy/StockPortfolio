@@ -40,32 +40,50 @@ export default async function handler(
     const holdings = await Promise.all(
       Object.entries(holdingsData).map(async ([ticker, data]: [string, any]): Promise<Holding> => {
         let quote;
-        try {
-          // First, try with NSE
-          quote = await yahooFinance.quote(ticker + '.NS');
-        } catch (nsError) {
-          console.warn(`Could not fetch ${ticker}.NS, trying ${ticker}.BO...`);
+        const hasSuffix = ticker.includes('.');
+
+        if (hasSuffix) {
+          // If ticker already has a suffix, use it directly
           try {
-            // If NSE fails, try with BSE
-            quote = await yahooFinance.quote(ticker + '.BO');
-          } catch (boError) {
-            console.error(`Error fetching data for ${ticker} from both NSE and BSE:`, boError);
-            // If both fail, return fallback data
-            return {
-              ticker,
-              name: ticker,
-              buyPrice: data.averagePrice,
-              quantity: data.quantity,
-              lastTradedPrice: data.averagePrice,
-              dailyChange: 0,
-              dailyChangePercentage: 0,
-              dayRange: 'N/A',
-              volume: 0,
-              averageBuyPrice: data.averagePrice,
-              unrealizedPL: 0,
-              unrealizedPLPercentage: 0
-            };
+            quote = await yahooFinance.quote(ticker);
+          } catch (error) {
+            console.error(`Error fetching data for suffixed ticker ${ticker}:`, error);
+            quote = undefined;
           }
+        } else {
+          // Otherwise, try .NS and then .BO
+          try {
+            // First, try with NSE
+            quote = await yahooFinance.quote(ticker + '.NS');
+          } catch (nsError) {
+            console.warn(`Could not fetch ${ticker}.NS, trying ${ticker}.BO...`);
+            try {
+              // If NSE fails, try with BSE
+              quote = await yahooFinance.quote(ticker + '.BO');
+            } catch (boError) {
+              console.error(`Error fetching data for ${ticker} from both NSE and BSE:`, boError);
+              quote = undefined;
+            }
+          }
+        }
+
+        // If quote is still not found, return fallback data
+        if (!quote) {
+          console.error(`Data for ticker ${ticker} not found on NSE or BSE. Using fallback data.`);
+          return {
+            ticker,
+            name: ticker, // Fallback name
+            buyPrice: data.averagePrice,
+            quantity: data.quantity,
+            lastTradedPrice: data.averagePrice, // Fallback price
+            dailyChange: 0,
+            dailyChangePercentage: 0,
+            dayRange: 'N/A',
+            volume: 0,
+            averageBuyPrice: data.averagePrice,
+            unrealizedPL: 0,
+            unrealizedPLPercentage: 0
+          };
         }
           
         const lastTradedPrice = quote.regularMarketPrice || data.averagePrice;

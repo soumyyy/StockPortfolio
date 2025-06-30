@@ -339,7 +339,7 @@ export default function Holdings() {
               const direction = sortConfig.direction === 'asc' ? 1 : -1;
               switch (sortConfig.key) {
                 case 'alphabetical':
-                  return direction * a.name.localeCompare(b.name);
+                  return direction * a.ticker.localeCompare(b.ticker);
                 case 'unrealizedPL':
                   return direction * (a.unrealizedPL - b.unrealizedPL);
                 case 'dailyChangePercentage':
