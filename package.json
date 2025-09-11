@@ -9,6 +9,7 @@
     "lint": "next lint",
     "upload-holdings": "node scripts/upload-holdings.mjs",
     "generate-icons": "node scripts/generate-icons.mjs",
+    "resize-icon": "node scripts/resize-icon.mjs",
     "postbuild": "npm run generate-icons"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "papaparse": "^5.5.2",
     "react": "18.2.0",
     "react-dom": "18.2.0",
+    "sharp": "^0.34.3",
     "yahoo-finance2": "^2.13.3"
   },
   "devDependencies": {
