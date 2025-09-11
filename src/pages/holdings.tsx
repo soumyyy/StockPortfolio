@@ -3,6 +3,7 @@ import { Holding } from '../types/holding';
 import Link from 'next/link';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefresh from '../components/PullToRefresh';
+import EditHoldingModal from '../components/EditHoldingModal';
 
 // Lazy load components for better performance
 const HoldingCard = lazy(() => import('../components/HoldingCard'));
@@ -126,6 +127,17 @@ export default function Holdings() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Edit modal state
+  const [editModal, setEditModal] = useState<{
+    isOpen: boolean;
+    holding: Holding | null;
+    isNew: boolean;
+  }>({
+    isOpen: false,
+    holding: null,
+    isNew: false
+  });
 
   // Pull to refresh functionality
   const refreshData = useCallback(async () => {
@@ -189,6 +201,90 @@ export default function Holdings() {
     threshold: 80,
     resistance: 0.5,
   });
+
+  // Edit/Delete functions
+  const handleEditHolding = (holding: Holding) => {
+    setEditModal({
+      isOpen: true,
+      holding,
+      isNew: false
+    });
+  };
+
+  const handleAddHolding = () => {
+    setEditModal({
+      isOpen: true,
+      holding: null,
+      isNew: true
+    });
+  };
+
+  const handleDeleteHolding = async (ticker: string) => {
+    if (!confirm(`Are you sure you want to delete ${ticker}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/updateHolding', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ticker,
+          quantity: 0,
+          averagePrice: 0,
+          action: 'delete'
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh data
+        await refreshData();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting holding:', error);
+      alert('Failed to delete holding');
+    }
+  };
+
+  const handleSaveHolding = async (data: { ticker: string; quantity: number; averagePrice: number }) => {
+    try {
+      const response = await fetch('/api/updateHolding', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...data,
+          action: editModal.isNew ? 'add' : 'update'
+        }),
+      });
+
+      if (response.ok) {
+        // Refresh data
+        await refreshData();
+        return;
+      } else {
+        const error = await response.json();
+        throw new Error(error.error);
+      }
+    } catch (error) {
+      console.error('Error saving holding:', error);
+      throw error;
+    }
+  };
+
+  const closeEditModal = () => {
+    setEditModal({
+      isOpen: false,
+      holding: null,
+      isNew: false
+    });
+  };
 
   // Handle search toggle
   const toggleSearch = () => {
@@ -280,14 +376,14 @@ export default function Holdings() {
   const topLoser = [...holdings].sort((a, b) => a.unrealizedPLPercentage - b.unrealizedPLPercentage)[0];
 
   return isLoading ? <LoadingSkeleton /> : (
-    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6">
+    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6 safe-area-inset-top pb-safe">
       <PullToRefresh
         isPulling={isPulling}
         isRefreshing={isRefreshing}
         pullDistance={pullDistance}
         canRefresh={canRefresh}
       />
-      <div className="max-w-5xl mx-auto px-4 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 space-y-6 pt-safe">
         <div className="mb-4">
           <Link href="/" className="inline-flex items-center text-sm text-white/70 hover:text-white/90 transition-colors">
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -307,6 +403,12 @@ export default function Holdings() {
         <div className="flex items-center justify-between">
           <div className={`flex items-center gap-4 ${showSearch ? 'w-full sm:w-auto' : ''}`}>
             <h2 className={`text-xs font-medium text-white/60 ${showSearch ? 'hidden sm:block' : 'block'}`}>Holdings</h2>
+            <button
+              onClick={handleAddHolding}
+              className="px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.06] rounded-lg text-xs text-white/70 transition-colors"
+            >
+              Add
+            </button>
             {/* Search Bar */}
             <div className={`flex-1 sm:flex-initial transition-all duration-300 ease-in-out transform origin-right ${
               showSearch ? 'w-full sm:w-48 opacity-100 scale-x-100' : 'w-0 opacity-0 scale-x-0'
@@ -427,11 +529,24 @@ export default function Holdings() {
             })
             .map((holding) => (
               <Suspense key={holding.ticker} fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
-                <HoldingCard holding={holding} />
+                <HoldingCard 
+                  holding={holding} 
+                  onEdit={handleEditHolding}
+                  // onDelete={handleDeleteHolding} // Commented out for now
+                />
               </Suspense>
             ))}
         </div>
       </div>
+      
+      {/* Edit Modal */}
+      <EditHoldingModal
+        isOpen={editModal.isOpen}
+        onClose={closeEditModal}
+        holding={editModal.holding}
+        isNew={editModal.isNew}
+        onSave={handleSaveHolding}
+      />
     </div>
   );
 }

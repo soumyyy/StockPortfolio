@@ -13,19 +13,9 @@ const GlobalMarkets = lazy(() => import('../components/GlobalMarkets'));
 const StockCard = lazy(() => import('../components/StockCard'));
 
 interface MarketData {
-  topGainers: MarketStock[];
-  topLosers: MarketStock[];
   indices: MarketIndex[];
 }
 
-interface MarketStock {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  volume: number;
-}
 
 interface MarketIndex {
   name: string;
@@ -52,7 +42,6 @@ const LoadingSkeleton = () => (
       {/* Market Movers Skeleton */}
       {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {[1, 2].map((section) => (
-          <SkeletonMarketMovers key={section} />
         ))}
       </div> */}
 
@@ -83,27 +72,6 @@ const SkeletonCard = () => (
   </div>
 );
 
-const SkeletonMarketMovers = () => (
-  <div className="space-y-3">
-    <div className="h-3 w-32 bg-white/10 rounded"></div>
-    <div className="space-y-px">
-      {[1, 2, 3, 4, 5].map((item) => (
-        <div key={item} className="backdrop-blur-md bg-white/[0.03] rounded border border-white/[0.06] p-3">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1.5">
-              <div className="h-4 w-24 bg-white/10 rounded"></div>
-              <div className="h-3 w-32 bg-white/10 rounded"></div>
-            </div>
-            <div className="text-right space-y-1">
-              <div className="h-4 w-16 bg-white/10 rounded"></div>
-              <div className="h-3 w-12 bg-white/10 rounded"></div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-);
 
 const SkeletonButton = () => (
   <div className="flex justify-center mt-7">
@@ -134,8 +102,6 @@ export default function Home() {
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [marketData, setMarketData] = useState<MarketData>({
-    topGainers: [],
-    topLosers: [],
     indices: [
       { name: 'SENSEX', value: 0, change: 0, changePercent: 0 },
       { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0 }
@@ -147,24 +113,19 @@ export default function Home() {
     try {
       setIsPageLoading(true);
 
-      // Fetch holdings and market data in parallel
-      const [holdingsResponse, marketResponse, indicesResponse] = await Promise.allSettled([
-        fetch('/api/stockData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        }),
-        fetch('https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=10&scrIds=day_gainers,day_losers&region=IN', {
-          headers: {
-            'Cache-Control': 'max-age=300',
-          },
-        }),
-        fetch('/api/indicesData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        })
-      ]);
+        // Fetch holdings and market data in parallel
+        const [holdingsResponse, indicesResponse] = await Promise.allSettled([
+          fetch('/api/stockData', {
+            headers: {
+              'Cache-Control': 'max-age=60',
+            },
+          }),
+          fetch('/api/indicesData', {
+            headers: {
+              'Cache-Control': 'max-age=60',
+            },
+          })
+        ]);
 
       // Process holdings data
       if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
@@ -172,17 +133,6 @@ export default function Home() {
         setHoldings(holdingsData);
       }
 
-      // Process market data
-      if (marketResponse.status === 'fulfilled') {
-        const marketData = await marketResponse.value.json();
-        if (marketData.finance?.result) {
-          setMarketData((prev) => ({
-            ...prev,
-            topGainers: marketData.finance.result[0]?.quotes || [],
-            topLosers: marketData.finance.result[1]?.quotes || []
-          }));
-        }
-      }
 
       // Process indices data
       if (indicesResponse.status === 'fulfilled' && indicesResponse.value.ok) {
@@ -268,51 +218,32 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const fetchMarketData = async () => {
+    const fetchHoldingsData = async () => {
       try {
         setIsPageLoading(true);
 
-        // Fetch holdings and market data in parallel
-        const [holdingsResponse, marketResponse] = await Promise.allSettled([
-          fetch('/api/stockData', {
-            headers: {
-              'Cache-Control': 'max-age=60',
-            },
-          }),
-          fetch('https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=10&scrIds=day_gainers,day_losers&region=IN', {
-            headers: {
-              'Cache-Control': 'max-age=300',
-            },
-          })
-        ]);
+        // Fetch holdings data
+        const holdingsResponse = await fetch('/api/stockData', {
+          headers: {
+            'Cache-Control': 'max-age=60',
+          },
+        });
 
         // Process holdings data
-        if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
-          const holdingsData = await holdingsResponse.value.json();
+        if (holdingsResponse.ok) {
+          const holdingsData = await holdingsResponse.json();
           setHoldings(holdingsData);
         }
-
-        // Process market data
-        if (marketResponse.status === 'fulfilled') {
-          const marketData = await marketResponse.value.json();
-          if (marketData.finance?.result) {
-            setMarketData((prev) => ({
-              ...prev,
-              topGainers: marketData.finance.result[0]?.quotes || [],
-              topLosers: marketData.finance.result[1]?.quotes || []
-            }));
-          }
-        }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching holdings data:', error);
       } finally {
         setIsPageLoading(false);
       }
     };
 
-    fetchMarketData();
-    const marketInterval = setInterval(fetchMarketData, 300000);
-    return () => clearInterval(marketInterval);
+    fetchHoldingsData();
+    const holdingsInterval = setInterval(fetchHoldingsData, 300000);
+    return () => clearInterval(holdingsInterval);
   }, []);
 
   const handleSearch = async (query: string) => {
@@ -378,14 +309,14 @@ export default function Home() {
   };
 
   return isPageLoading ? <LoadingSkeleton /> : (
-    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6">
+    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6 safe-area-inset-top pb-safe">
       <PullToRefresh
         isPulling={isPulling}
         isRefreshing={isRefreshing}
         pullDistance={pullDistance}
         canRefresh={canRefresh}
       />
-      <div className="max-w-5xl mx-auto px-4 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 space-y-6 pt-safe">
         {/* Search Section */}
         <div className="flex items-center justify-between mb-6">
           <div className={`flex items-center gap-4 ${showSearch ? 'w-full' : ''}`}>
