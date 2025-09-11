@@ -15,6 +15,10 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Holding[]>
 ) {
+  // Set cache headers
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+  res.setHeader('Content-Type', 'application/json');
+  
   try {
     // Fetch holdings from Edge Config
     const response = await fetch(`https://api.vercel.com/v1/edge-config/${EDGE_CONFIG_ID}/items`, {

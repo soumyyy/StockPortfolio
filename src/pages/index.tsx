@@ -1,12 +1,16 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { useRouter } from 'next/router';
-import PortfolioSummary from '../components/PortfolioSummary';
-import MarketIndices from '../components/MarketIndices';
-import GlobalMarkets from '../components/GlobalMarkets';
 import Link from 'next/link';
 import { Holding } from '../types/holding';
-import StockCard from '../components/StockCard';
 import debounce from 'lodash.debounce';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import PullToRefresh from '../components/PullToRefresh';
+
+// Lazy load components for better performance
+const PortfolioSummary = lazy(() => import('../components/PortfolioSummary'));
+const MarketIndices = lazy(() => import('../components/MarketIndices'));
+const GlobalMarkets = lazy(() => import('../components/GlobalMarkets'));
+const StockCard = lazy(() => import('../components/StockCard'));
 
 interface MarketData {
   topGainers: MarketStock[];
@@ -138,10 +142,92 @@ export default function Home() {
     ]
   });
 
+  // Pull to refresh functionality
+  const refreshData = useCallback(async () => {
+    try {
+      setIsPageLoading(true);
+
+      // Fetch holdings and market data in parallel
+      const [holdingsResponse, marketResponse, indicesResponse] = await Promise.allSettled([
+        fetch('/api/stockData', {
+          headers: {
+            'Cache-Control': 'max-age=60',
+          },
+        }),
+        fetch('https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=10&scrIds=day_gainers,day_losers&region=IN', {
+          headers: {
+            'Cache-Control': 'max-age=300',
+          },
+        }),
+        fetch('/api/indicesData', {
+          headers: {
+            'Cache-Control': 'max-age=60',
+          },
+        })
+      ]);
+
+      // Process holdings data
+      if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
+        const holdingsData = await holdingsResponse.value.json();
+        setHoldings(holdingsData);
+      }
+
+      // Process market data
+      if (marketResponse.status === 'fulfilled') {
+        const marketData = await marketResponse.value.json();
+        if (marketData.finance?.result) {
+          setMarketData((prev) => ({
+            ...prev,
+            topGainers: marketData.finance.result[0]?.quotes || [],
+            topLosers: marketData.finance.result[1]?.quotes || []
+          }));
+        }
+      }
+
+      // Process indices data
+      if (indicesResponse.status === 'fulfilled' && indicesResponse.value.ok) {
+        const indicesData = await indicesResponse.value.json();
+        if (indicesData && Array.isArray(indicesData) && indicesData.length >= 2) {
+          setMarketData(prev => ({
+            ...prev,
+            indices: [
+              {
+                name: 'SENSEX',
+                value: indicesData[0].value || 0,
+                change: indicesData[0].change || 0,
+                changePercent: indicesData[0].changePercent || 0
+              },
+              {
+                name: 'NIFTY 50',
+                value: indicesData[1].value || 0,
+                change: indicesData[1].change || 0,
+                changePercent: indicesData[1].changePercent || 0
+              }
+            ]
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsPageLoading(false);
+    }
+  }, []);
+
+  const { isPulling, isRefreshing, pullDistance, canRefresh } = usePullToRefresh({
+    onRefresh: refreshData,
+    threshold: 80,
+    resistance: 0.5,
+  });
+
   useEffect(() => {
     const fetchIndicesData = async () => {
       try {
-        const indicesResponse = await fetch('/api/indicesData');
+        const indicesResponse = await fetch('/api/indicesData', {
+          headers: {
+            'Cache-Control': 'max-age=60',
+          },
+        });
         if (!indicesResponse.ok) {
           throw new Error(`Failed to fetch indices: ${indicesResponse.status}`);
         }
@@ -173,7 +259,10 @@ export default function Home() {
       }
     };
 
+    // Fetch immediately
     fetchIndicesData();
+    
+    // Set up interval for updates
     const indicesInterval = setInterval(fetchIndicesData, 300000); // 5 minutes
     return () => clearInterval(indicesInterval);
   }, []);
@@ -183,20 +272,36 @@ export default function Home() {
       try {
         setIsPageLoading(true);
 
-        const holdingsResponse = await fetch('/api/stockData');
-        if (!holdingsResponse.ok) throw new Error('Failed to fetch holdings data');
-        const holdingsData = await holdingsResponse.json();
-        setHoldings(holdingsData);
+        // Fetch holdings and market data in parallel
+        const [holdingsResponse, marketResponse] = await Promise.allSettled([
+          fetch('/api/stockData', {
+            headers: {
+              'Cache-Control': 'max-age=60',
+            },
+          }),
+          fetch('https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=10&scrIds=day_gainers,day_losers&region=IN', {
+            headers: {
+              'Cache-Control': 'max-age=300',
+            },
+          })
+        ]);
 
-        const marketResponse = await fetch('https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?count=10&scrIds=day_gainers,day_losers&region=IN');
-        const marketData = await marketResponse.json();
+        // Process holdings data
+        if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
+          const holdingsData = await holdingsResponse.value.json();
+          setHoldings(holdingsData);
+        }
 
-        if (marketData.finance?.result) {
-          setMarketData((prev) => ({
-            ...prev,
-            topGainers: marketData.finance.result[0]?.quotes || [],
-            topLosers: marketData.finance.result[1]?.quotes || []
-          }));
+        // Process market data
+        if (marketResponse.status === 'fulfilled') {
+          const marketData = await marketResponse.value.json();
+          if (marketData.finance?.result) {
+            setMarketData((prev) => ({
+              ...prev,
+              topGainers: marketData.finance.result[0]?.quotes || [],
+              topLosers: marketData.finance.result[1]?.quotes || []
+            }));
+          }
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -274,6 +379,12 @@ export default function Home() {
 
   return isPageLoading ? <LoadingSkeleton /> : (
     <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6">
+      <PullToRefresh
+        isPulling={isPulling}
+        isRefreshing={isRefreshing}
+        pullDistance={pullDistance}
+        canRefresh={canRefresh}
+      />
       <div className="max-w-5xl mx-auto px-4 space-y-6">
         {/* Search Section */}
         <div className="flex items-center justify-between mb-6">
@@ -362,15 +473,17 @@ export default function Home() {
                   <div className="divide-y divide-white/[0.06]">
                     {searchResults.map((stock) => (
                       <div key={stock.ticker}>
-                        <StockCard
-                          stock={{
-                            ticker: stock.ticker,
-                            name: stock.name,
-                            price: stock.price,
-                            change: stock.change,
-                            changePercent: stock.changePercent
-                          }}
-                        />
+                        <Suspense fallback={<div className="h-16 bg-white/[0.03] rounded animate-pulse" />}>
+                          <StockCard
+                            stock={{
+                              ticker: stock.ticker,
+                              name: stock.name,
+                              price: stock.price,
+                              change: stock.change,
+                              changePercent: stock.changePercent
+                            }}
+                          />
+                        </Suspense>
                       </div>
                     ))}
                   </div>
@@ -409,9 +522,13 @@ export default function Home() {
             }
           }}
         >
-          <MarketIndices indices={marketData.indices} error={false} />
+          <Suspense fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
+            <MarketIndices indices={marketData.indices} error={false} />
+          </Suspense>
           <div className="mt-6">
-            <PortfolioSummary holdings={holdings} />
+            <Suspense fallback={<div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />}>
+              <PortfolioSummary holdings={holdings} />
+            </Suspense>
           </div>
           <div className="flex justify-center mt-7">
             <Link href="/holdings" className="px-6 py-2 backdrop-blur-md bg-white/[0.03] hover:bg-white/[0.06] rounded-lg border border-white/[0.06] transition-colors">
@@ -419,7 +536,9 @@ export default function Home() {
             </Link>
           </div>
           <div className="mt-6">
-            <GlobalMarkets />
+            <Suspense fallback={<div className="h-32 bg-white/[0.03] rounded-lg animate-pulse" />}>
+              <GlobalMarkets />
+            </Suspense>
           </div>
         </div>
       </div>

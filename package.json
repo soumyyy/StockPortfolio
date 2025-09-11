@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "upload-holdings": "node scripts/upload-holdings.mjs"
+    "upload-holdings": "node scripts/upload-holdings.mjs",
+    "generate-icons": "node scripts/generate-icons.mjs",
+    "postbuild": "npm run generate-icons"
   },
   "dependencies": {
     "@types/lodash.debounce": "^4.0.9",

@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import HoldingCard from '../components/HoldingCard';
-import PortfolioSummary from '../components/PortfolioSummary';
+import { useState, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
 import { Holding } from '../types/holding';
-import MarketIndices from '../components/MarketIndices';
 import Link from 'next/link';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import PullToRefresh from '../components/PullToRefresh';
+
+// Lazy load components for better performance
+const HoldingCard = lazy(() => import('../components/HoldingCard'));
+const PortfolioSummary = lazy(() => import('../components/PortfolioSummary'));
+const MarketIndices = lazy(() => import('../components/MarketIndices'));
 
 type SortOption = 'unrealizedPL' | 'dailyChangePercentage' | 'alphabetical';
 
@@ -123,6 +127,69 @@ export default function Holdings() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Pull to refresh functionality
+  const refreshData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+
+      // Fetch both indices and holdings data in parallel
+      const [indicesResponse, holdingsResponse] = await Promise.allSettled([
+        fetch('/api/indicesData', {
+          headers: {
+            'Cache-Control': 'max-age=60',
+          },
+        }),
+        fetch('/api/stockData', {
+          headers: {
+            'Cache-Control': 'max-age=60',
+          },
+        })
+      ]);
+
+      // Process indices data
+      if (indicesResponse.status === 'fulfilled' && indicesResponse.value.ok) {
+        const indicesData = await indicesResponse.value.json();
+        if (indicesData && Array.isArray(indicesData) && indicesData.length >= 2) {
+          setIndices([
+            {
+              name: 'SENSEX',
+              value: indicesData[0].value || 0,
+              change: indicesData[0].change || 0,
+              changePercent: indicesData[0].changePercent || 0,
+              lastUpdate: new Date().toISOString(),
+              isStale: false
+            },
+            {
+              name: 'NIFTY 50',
+              value: indicesData[1].value || 0,
+              change: indicesData[1].change || 0,
+              changePercent: indicesData[1].changePercent || 0,
+              lastUpdate: new Date().toISOString(),
+              isStale: false
+            }
+          ]);
+          setIndicesError(false);
+        }
+      }
+
+      // Process holdings data
+      if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
+        const holdingsData = await holdingsResponse.value.json();
+        setHoldings(holdingsData);
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const { isPulling, isRefreshing, pullDistance, canRefresh } = usePullToRefresh({
+    onRefresh: refreshData,
+    threshold: 80,
+    resistance: 0.5,
+  });
+
   // Handle search toggle
   const toggleSearch = () => {
     setShowSearch(!showSearch);
@@ -214,6 +281,12 @@ export default function Holdings() {
 
   return isLoading ? <LoadingSkeleton /> : (
     <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6">
+      <PullToRefresh
+        isPulling={isPulling}
+        isRefreshing={isRefreshing}
+        pullDistance={pullDistance}
+        canRefresh={canRefresh}
+      />
       <div className="max-w-5xl mx-auto px-4 space-y-6">
         <div className="mb-4">
           <Link href="/" className="inline-flex items-center text-sm text-white/70 hover:text-white/90 transition-colors">
@@ -223,8 +296,12 @@ export default function Holdings() {
             Home
           </Link>
         </div>
-        <MarketIndices indices={indices} error={indicesError} />
-        <PortfolioSummary holdings={holdings} />
+        <Suspense fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
+          <MarketIndices indices={indices} error={indicesError} />
+        </Suspense>
+        <Suspense fallback={<div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />}>
+          <PortfolioSummary holdings={holdings} />
+        </Suspense>
         
         {/* Holdings Section Header */}
         <div className="flex items-center justify-between">
@@ -349,7 +426,9 @@ export default function Holdings() {
               }
             })
             .map((holding) => (
-              <HoldingCard key={holding.ticker} holding={holding} />
+              <Suspense key={holding.ticker} fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
+                <HoldingCard holding={holding} />
+              </Suspense>
             ))}
         </div>
       </div>

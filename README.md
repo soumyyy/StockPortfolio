@@ -11,6 +11,9 @@ A minimalistic, real-time stock portfolio tracker built with Next.js and inspire
 - Dark theme with high-contrast UI
 - Mobile-first responsive design
 - TypeScript for type safety
+- **PWA Support** - Add to home screen for full-screen mobile experience
+- **Optimized Performance** - Lazy loading, code splitting, and caching
+- **Service Worker** - Offline caching for better performance
 
 ## Tech Stack
 
