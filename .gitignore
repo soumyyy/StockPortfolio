@@ -54,3 +54,20 @@ next-env.d.ts
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Build artifacts and temporary files
+*.log
+*.tmp
+*.temp
+.cache/
+.temp/
+.tmp/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Package manager files
+package-lock.json.backup
+yarn.lock.backup
