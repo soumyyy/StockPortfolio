@@ -93,15 +93,28 @@ export default function EditHoldingModal({
   const handleApplyAdditionalLot = () => {
     const addQuantity = Number(additionalLot.quantity);
     const addPrice = Number(additionalLot.price);
-    if (addQuantity <= 0 || addPrice <= 0) {
+    if (!addQuantity || Number.isNaN(addQuantity)) {
       return;
     }
 
     const currentQuantity = Number(formData.quantity) || 0;
     const currentAverage = Number(formData.averagePrice) || 0;
-    const totalQuantity = currentQuantity + addQuantity;
-    const totalValue = currentQuantity * currentAverage + addQuantity * addPrice;
-    const newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
+    let totalQuantity = currentQuantity + addQuantity;
+    if (totalQuantity < 0) {
+      totalQuantity = 0;
+    }
+
+    let newAverage = currentAverage;
+
+    if (addQuantity > 0) {
+      if (!addPrice || addPrice <= 0) {
+        return;
+      }
+      const totalValue = currentQuantity * currentAverage + addQuantity * addPrice;
+      newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
+    } else if (totalQuantity === 0) {
+      newAverage = 0;
+    }
 
     setFormData(prev => ({
       ...prev,
@@ -111,7 +124,12 @@ export default function EditHoldingModal({
     setAdditionalLot({ quantity: '', price: '' });
   };
 
-  const canApplyAdditionalLot = Number(additionalLot.quantity) > 0 && Number(additionalLot.price) > 0;
+  const additionalQuantityValue = Number(additionalLot.quantity);
+  const additionalPriceValue = Number(additionalLot.price);
+  const canApplyAdditionalLot = (
+    (additionalQuantityValue > 0 && additionalPriceValue > 0) ||
+    additionalQuantityValue < 0
+  );
 
   if (!isOpen) return null;
 
@@ -208,7 +226,7 @@ export default function EditHoldingModal({
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-white/40">
                 <span>Add purchase lot</span>
-                <span className="text-white/30 normal-case">Auto updates qty & avg</span>
+                <span className="text-white/30 normal-case">Buy/Sell</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -217,7 +235,6 @@ export default function EditHoldingModal({
                     type="number"
                     value={additionalLot.quantity}
                     onChange={(e) => setAdditionalLot(prev => ({ ...prev, quantity: e.target.value }))}
-                    min="0"
                     step="1"
                     placeholder="0"
                     className="w-full bg-white/[0.02] border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-white/20"

@@ -29,77 +29,60 @@ interface MarketIndex {
 function LoadingSkeleton() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6">
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-5xl mx-auto px-4 space-y-6">
+        <div className="h-4 w-16 bg-white/10 rounded"></div>
 
-        <div className="space-y-6">
-          {/* Market Indices */}
-          <div className="grid grid-cols-2 gap-3">
-            {[1, 2].map((i) => (
-              <div key={i} className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-3.5 animate-pulse">
-                <div className="h-4 w-24 bg-white/10 rounded mb-2"></div>
-                <div className="h-6 w-32 bg-white/10 rounded"></div>
+        <div className="grid grid-cols-2 gap-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-3 animate-pulse space-y-2">
+              <div className="h-3 w-20 bg-white/10 rounded"></div>
+              <div className="h-5 w-24 bg-white/10 rounded"></div>
+              <div className="h-3 w-16 bg-white/10 rounded"></div>
+            </div>
+          ))}
+        </div>
+
+        <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-5 animate-pulse">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="space-y-2">
+                <div className="h-3 w-20 bg-white/10 rounded"></div>
+                <div className="h-5 w-32 bg-white/10 rounded"></div>
+                <div className="h-2.5 w-20 bg-white/10 rounded"></div>
               </div>
             ))}
           </div>
+        </div>
 
-          {/* Portfolio Summary Skeleton */}
-          <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-5">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="space-y-2">
-                  <div className="h-3 w-20 bg-white/10 rounded animate-pulse"></div>
-                  <div className="h-5 w-32 bg-white/10 rounded animate-pulse"></div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-14 bg-white/10 rounded animate-pulse"></div>
-                    <div className="h-3 w-20 bg-white/10 rounded animate-pulse"></div>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-20 bg-white/10 rounded"></div>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-16 bg-white/[0.03] border border-white/[0.05] rounded-lg animate-pulse"></div>
+            <div className="h-8 w-8 bg-white/[0.03] border border-white/[0.05] rounded-lg animate-pulse"></div>
+            <div className="h-8 w-32 bg-white/[0.03] border border-white/[0.05] rounded-lg animate-pulse"></div>
           </div>
+        </div>
 
-          {/* Holdings List Skeleton */}
-          <div className="space-y-3">
-            {/* Sort Controls Skeleton */}
-            <div className="flex justify-end">
-              <div className="h-8 w-32 bg-white/[0.03] rounded animate-pulse"></div>
-            </div>
-
-            {/* Holdings Cards */}
-            <div className="space-y-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-4">
-                  <div className="flex flex-col space-y-3">
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <div className="h-5 w-32 bg-white/10 rounded animate-pulse"></div>
-                        <div className="h-4 w-24 bg-white/10 rounded animate-pulse"></div>
-                      </div>
-                      <div className="text-right">
-                        <div className="h-5 w-24 bg-white/10 rounded animate-pulse mb-1"></div>
-                        <div className="h-4 w-20 bg-white/10 rounded animate-pulse"></div>
-                      </div>
-                    </div>
-                    
-                    {/* Details (initially hidden) */}
-                    <div className="pt-3 border-t border-white/[0.06] hidden">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <div className="h-4 w-20 bg-white/10 rounded animate-pulse"></div>
-                          <div className="h-5 w-28 bg-white/10 rounded animate-pulse"></div>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="h-4 w-20 bg-white/10 rounded animate-pulse"></div>
-                          <div className="h-5 w-28 bg-white/10 rounded animate-pulse"></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-4 animate-pulse space-y-4">
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="h-3 w-28 bg-white/10 rounded"></div>
+                <div className="h-3 w-16 bg-white/10 rounded"></div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <div className="h-4 w-20 bg-white/10 rounded"></div>
+                  <div className="h-3 w-32 bg-white/10 rounded"></div>
                 </div>
-              ))}
+                <div className="h-4 w-24 bg-white/10 rounded"></div>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="h-3 w-28 bg-white/10 rounded"></div>
+                <div className="h-3 w-32 bg-white/10 rounded"></div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
       </div>
     </div>
