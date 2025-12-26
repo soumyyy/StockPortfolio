@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { useRouter } from 'next/router';
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
 import Link from 'next/link';
 import { Holding } from '../types/holding';
+import type { PortfolioAPIResponse } from '../types/portfolio';
 import debounce from 'lodash.debounce';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import PullToRefresh from '../components/PullToRefresh';
@@ -95,12 +95,15 @@ const SkeletonGlobalMarkets = () => (
 
 export default function Home() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [portfolioResponse, setPortfolioResponse] = useState<PortfolioAPIResponse | null>(null);
+  const [portfolioError, setPortfolioError] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null);
   const [marketData, setMarketData] = useState<MarketData>({
     indices: [
       { name: 'SENSEX', value: 0, change: 0, changePercent: 0 },
@@ -108,61 +111,115 @@ export default function Home() {
     ]
   });
 
+  const accounts = portfolioResponse?.accounts ?? [];
+  const accountsNeedingSync = accounts.filter((account) => account.needsSync);
+  const latestUpdatedAt = useMemo(() => {
+    if (!portfolioResponse?.combined?.fetchedAt) {
+      return null;
+    }
+    try {
+      return new Date(portfolioResponse.combined.fetchedAt).toLocaleString('en-IN', {
+        hour12: true,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+      });
+    } catch {
+      return portfolioResponse.combined.fetchedAt;
+    }
+  }, [portfolioResponse]);
+
+  const formatTimestamp = (value?: string | null) => {
+    if (!value) {
+      return 'Never synced';
+    }
+    try {
+      return new Date(value).toLocaleString('en-IN', {
+        hour12: true,
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+      });
+    } catch {
+      return value;
+    }
+  };
+
+  const fetchPortfolioData = useCallback(async () => {
+    try {
+      const response = await fetch('/api/portfolio', {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch portfolio: ${response.status}`);
+      }
+
+      const data = (await response.json()) as PortfolioAPIResponse;
+      setHoldings(data?.combined?.holdings ?? []);
+      setPortfolioResponse(data);
+      setPortfolioError(data.errors[0]?.message ?? null);
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error);
+      const err = error instanceof Error ? error : new Error('Failed to fetch portfolio data');
+      setPortfolioError(err.message);
+      throw err;
+    }
+  }, []);
+
+  const fetchIndicesData = useCallback(async () => {
+    const indicesResponse = await fetch('/api/indicesData', {
+      headers: {
+        'Cache-Control': 'max-age=60',
+      },
+    });
+
+    if (!indicesResponse.ok) {
+      throw new Error(`Failed to fetch indices: ${indicesResponse.status}`);
+    }
+
+    const indicesData = await indicesResponse.json();
+    if (!indicesData || !Array.isArray(indicesData) || indicesData.length < 2) {
+      throw new Error('Invalid indices data format');
+    }
+
+    setMarketData((prev) => ({
+      ...prev,
+      indices: [
+        {
+          name: 'SENSEX',
+          value: indicesData[0].value || 0,
+          change: indicesData[0].change || 0,
+          changePercent: indicesData[0].changePercent || 0,
+        },
+        {
+          name: 'NIFTY 50',
+          value: indicesData[1].value || 0,
+          change: indicesData[1].change || 0,
+          changePercent: indicesData[1].changePercent || 0,
+        },
+      ],
+    }));
+  }, []);
+
   // Pull to refresh functionality
   const refreshData = useCallback(async () => {
     try {
       setIsPageLoading(true);
 
-        // Fetch holdings and market data in parallel
-        const [holdingsResponse, indicesResponse] = await Promise.allSettled([
-          fetch('/api/stockData', {
-            headers: {
-              'Cache-Control': 'max-age=60',
-            },
-          }),
-          fetch('/api/indicesData', {
-            headers: {
-              'Cache-Control': 'max-age=60',
-            },
-          })
-        ]);
-
-      // Process holdings data
-      if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
-        const holdingsData = await holdingsResponse.value.json();
-        setHoldings(holdingsData);
-      }
-
-
-      // Process indices data
-      if (indicesResponse.status === 'fulfilled' && indicesResponse.value.ok) {
-        const indicesData = await indicesResponse.value.json();
-        if (indicesData && Array.isArray(indicesData) && indicesData.length >= 2) {
-          setMarketData(prev => ({
-            ...prev,
-            indices: [
-              {
-                name: 'SENSEX',
-                value: indicesData[0].value || 0,
-                change: indicesData[0].change || 0,
-                changePercent: indicesData[0].changePercent || 0
-              },
-              {
-                name: 'NIFTY 50',
-                value: indicesData[1].value || 0,
-                change: indicesData[1].change || 0,
-                changePercent: indicesData[1].changePercent || 0
-              }
-            ]
-          }));
-        }
-      }
+      await Promise.allSettled([fetchPortfolioData(), fetchIndicesData()]);
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
       setIsPageLoading(false);
     }
-  }, []);
+  }, [fetchIndicesData, fetchPortfolioData]);
 
   const { isPulling, isRefreshing, pullDistance, canRefresh } = usePullToRefresh({
     onRefresh: refreshData,
@@ -171,80 +228,26 @@ export default function Home() {
   });
 
   useEffect(() => {
-    const fetchIndicesData = async () => {
-      try {
-        const indicesResponse = await fetch('/api/indicesData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        });
-        if (!indicesResponse.ok) {
-          throw new Error(`Failed to fetch indices: ${indicesResponse.status}`);
-        }
-        
-        const indicesData = await indicesResponse.json();
-        if (!indicesData || !Array.isArray(indicesData) || indicesData.length < 2) {
-          throw new Error('Invalid indices data format');
-        }
-
-        setMarketData(prev => ({
-          ...prev,
-          indices: [
-            {
-              name: 'SENSEX',
-              value: indicesData[0].value || 0,
-              change: indicesData[0].change || 0,
-              changePercent: indicesData[0].changePercent || 0
-            },
-            {
-              name: 'NIFTY 50',
-              value: indicesData[1].value || 0,
-              change: indicesData[1].change || 0,
-              changePercent: indicesData[1].changePercent || 0
-            }
-          ]
-        }));
-      } catch (error) {
-        console.error('Error fetching indices:', error);
-      }
-    };
-
-    // Fetch immediately
-    fetchIndicesData();
-    
-    // Set up interval for updates
-    const indicesInterval = setInterval(fetchIndicesData, 300000); // 5 minutes
-    return () => clearInterval(indicesInterval);
-  }, []);
+    refreshData();
+  }, [refreshData]);
 
   useEffect(() => {
-    const fetchHoldingsData = async () => {
-      try {
-        setIsPageLoading(true);
+    const indicesInterval = setInterval(() => {
+      fetchIndicesData().catch((error) => console.error('Error fetching indices:', error));
+    }, 300000);
 
-        // Fetch holdings data
-        const holdingsResponse = await fetch('/api/stockData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        });
+    return () => clearInterval(indicesInterval);
+  }, [fetchIndicesData]);
 
-        // Process holdings data
-        if (holdingsResponse.ok) {
-          const holdingsData = await holdingsResponse.json();
-          setHoldings(holdingsData);
-        }
-      } catch (error) {
-        console.error('Error fetching holdings data:', error);
-      } finally {
-        setIsPageLoading(false);
-      }
-    };
+  useEffect(() => {
+    const holdingsInterval = setInterval(() => {
+      fetchPortfolioData().catch((error) =>
+        console.error('Error fetching portfolio data:', error),
+      );
+    }, 300000);
 
-    fetchHoldingsData();
-    const holdingsInterval = setInterval(fetchHoldingsData, 300000);
     return () => clearInterval(holdingsInterval);
-  }, []);
+  }, [fetchPortfolioData]);
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
@@ -305,6 +308,40 @@ export default function Home() {
     } else {
       setSearchQuery('');
       setSearchResults([]);
+    }
+  };
+
+  const handleReconnect = (accountId: string) => {
+    if (typeof window !== 'undefined') {
+      window.location.href = `/api/kite/login?account=${accountId}`;
+    }
+  };
+
+  const handleSyncAccount = async (accountId: string) => {
+    try {
+      setSyncingAccountId(accountId);
+      setPortfolioError(null);
+      const response = await fetch(`/api/kite/sync?account=${encodeURIComponent(accountId)}`, {
+        method: 'POST',
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        if (data?.reauthRequired) {
+          handleReconnect(accountId);
+          return;
+        }
+        throw new Error(data?.message || 'Failed to sync holdings');
+      }
+
+      await refreshData();
+    } catch (error) {
+      console.error('Error syncing account:', error);
+      const message =
+        error instanceof Error ? error.message : 'Failed to sync Zerodha holdings';
+      setPortfolioError(message);
+    } finally {
+      setSyncingAccountId(null);
     }
   };
 
@@ -427,6 +464,70 @@ export default function Home() {
           </div>
         )}
 
+        {accountsNeedingSync.length > 0 && (
+          <div className="backdrop-blur-md bg-amber-500/5 border border-amber-500/30 rounded-lg p-4 text-amber-100/90 text-sm space-y-3">
+            <p className="font-medium text-amber-200">
+              Some Zerodha accounts have not been synced yet. Sync to import holdings.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {accountsNeedingSync.map((account) => (
+                <button
+                  key={account.accountId}
+                  onClick={() => handleSyncAccount(account.accountId)}
+                  className="px-3 py-1.5 rounded-md border border-amber-400/60 hover:bg-amber-400/10 transition-colors text-xs font-semibold"
+                  disabled={syncingAccountId === account.accountId}
+                >
+                  {syncingAccountId === account.accountId ? 'Syncing...' : `Sync ${account.accountLabel}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {portfolioError && (
+          <div className="backdrop-blur-md bg-red-500/5 border border-red-500/30 rounded-lg p-4 text-red-100/90 text-sm">
+            {portfolioError}
+          </div>
+        )}
+
+        {accounts.length > 0 && (
+          <div className="backdrop-blur-md bg-white/[0.03] border border-white/[0.06] rounded-lg p-4 space-y-4">
+            {accounts.map((account) => (
+              <div
+                key={account.accountId}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.05] pb-3 last:border-0 last:pb-0"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-white/90">{account.accountLabel}</div>
+                  <div className="text-xs text-white/50">
+                    Last synced: {formatTimestamp(account.lastSyncedAt)}
+                  </div>
+                  {account.syncError && (
+                    <div className="text-xs text-red-400 mt-1">
+                      Last error: {account.syncError}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleSyncAccount(account.accountId)}
+                    className="px-3 py-1.5 rounded-md border border-white/[0.1] hover:bg-white/[0.05] transition-colors text-xs font-semibold"
+                    disabled={syncingAccountId === account.accountId}
+                  >
+                    {syncingAccountId === account.accountId ? 'Syncing…' : 'Sync from Zerodha'}
+                  </button>
+                  <button
+                    onClick={() => handleReconnect(account.accountId)}
+                    className="px-3 py-1.5 rounded-md border border-white/[0.06] hover:bg-white/[0.04] text-[11px] text-white/60"
+                  >
+                    Reconnect
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <style jsx global>{`
           .custom-scrollbar::-webkit-scrollbar {
             width: 4px;
@@ -456,10 +557,15 @@ export default function Home() {
           <Suspense fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
             <MarketIndices indices={marketData.indices} error={false} />
           </Suspense>
-          <div className="mt-6">
+          <div className="mt-6 space-y-2">
             <Suspense fallback={<div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />}>
               <PortfolioSummary holdings={holdings} />
             </Suspense>
+            {latestUpdatedAt && (
+              <div className="text-[11px] text-white/50 text-right">
+                Last updated at {latestUpdatedAt}
+              </div>
+            )}
           </div>
           <div className="flex justify-center mt-7">
             <Link href="/holdings" className="px-6 py-2 backdrop-blur-md bg-white/[0.03] hover:bg-white/[0.06] rounded-lg border border-white/[0.06] transition-colors">

@@ -12,4 +12,6 @@ export interface Holding {
   averageBuyPrice: number;
   unrealizedPL: number;
   unrealizedPLPercentage: number;
+  accountId?: string;
+  accountLabel?: string;
 }
