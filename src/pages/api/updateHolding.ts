@@ -19,12 +19,22 @@ export default async function handler(
   try {
     const { ticker, quantity, averagePrice, action } = req.body;
 
-    if (!ticker || !quantity || !averagePrice || !action) {
+    if (!ticker || !action) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    if (quantity <= 0 || averagePrice <= 0) {
-      return res.status(400).json({ error: 'Quantity and average price must be positive' });
+    const normalizedTicker = ticker.trim().toUpperCase();
+    const parsedQuantity = Number(quantity);
+    const parsedAveragePrice = Number(averagePrice);
+
+    if (action !== 'delete') {
+      if (!parsedQuantity || !parsedAveragePrice) {
+        return res.status(400).json({ error: 'Quantity and average price must be provided for add/update' });
+      }
+
+      if (parsedQuantity <= 0 || parsedAveragePrice <= 0) {
+        return res.status(400).json({ error: 'Quantity and average price must be positive' });
+      }
     }
 
     // Fetch current holdings from Edge Config
@@ -45,17 +55,35 @@ export default async function handler(
       throw new Error('No holdings found in Edge Config');
     }
 
-    const holdingsData = holdingsItem.value;
+    const holdingsData = holdingsItem.value || {};
+    const existingHolding = holdingsData[normalizedTicker];
 
-    if (action === 'add' || action === 'update') {
-      // Add or update holding
-      holdingsData[ticker] = {
-        averagePrice: Number(averagePrice),
-        quantity: Number(quantity)
+    if (action === 'add') {
+      if (existingHolding) {
+        const existingQuantity = Number(existingHolding.quantity) || 0;
+        const existingAverage = Number(existingHolding.averagePrice) || 0;
+        const totalQuantity = existingQuantity + parsedQuantity;
+        const totalValue = (existingQuantity * existingAverage) + (parsedQuantity * parsedAveragePrice);
+        const newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
+
+        holdingsData[normalizedTicker] = {
+          averagePrice: Number(newAverage.toFixed(2)),
+          quantity: totalQuantity
+        };
+      } else {
+        holdingsData[normalizedTicker] = {
+          averagePrice: parsedAveragePrice,
+          quantity: parsedQuantity
+        };
+      }
+    } else if (action === 'update') {
+      holdingsData[normalizedTicker] = {
+        averagePrice: parsedAveragePrice,
+        quantity: parsedQuantity
       };
     } else if (action === 'delete') {
       // Delete holding
-      delete holdingsData[ticker];
+      delete holdingsData[normalizedTicker];
     } else {
       return res.status(400).json({ error: 'Invalid action' });
     }

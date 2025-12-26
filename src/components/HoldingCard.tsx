@@ -1,5 +1,4 @@
 // src/components/HoldingCard.tsx
-import { useState } from 'react';
 import { Holding } from '../types/holding';
 
 interface HoldingCardProps {
@@ -9,7 +8,6 @@ interface HoldingCardProps {
 }
 
 export default function HoldingCard({ holding, onEdit, onDelete }: HoldingCardProps) {
-  const [showActions, setShowActions] = useState(false);
   const isPositive = holding.unrealizedPLPercentage > 0;
   const dailyChangeIsPositive = holding.dailyChangePercentage > 0;
 
@@ -20,11 +18,13 @@ export default function HoldingCard({ holding, onEdit, onDelete }: HoldingCardPr
     }).format(Math.abs(num));
   };
 
+  const handleEditClick = () => {
+    onEdit?.(holding);
+  };
+
   return (
     <div 
       className="p-3 hover:bg-white/[0.01] transition-all duration-200 backdrop-blur-sm relative group"
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
     >
       <div className="space-y-1.5">
         {/* Top Section: Quantity and Average */}
@@ -34,31 +34,21 @@ export default function HoldingCard({ holding, onEdit, onDelete }: HoldingCardPr
             <span>Avg: ₹{formatNumber(holding.averageBuyPrice)}</span>
           </div>
           {/* Action Buttons */}
-          {(showActions || onEdit || onDelete) && (
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {(onEdit || onDelete) && (
+            <div className="flex items-center gap-1">
               {onEdit && (
                 <button
-                  onClick={() => onEdit(holding)}
-                  className="p-1 hover:bg-white/[0.05] rounded transition-colors"
+                  type="button"
+                  onClick={handleEditClick}
+                  className="p-1 hover:bg-white/[0.05] rounded transition-colors text-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                   title="Edit holding"
                 >
-                  <svg className="w-3 h-3 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                 </button>
               )}
               {/* Delete button commented out for now */}
-              {/* {onDelete && (
-                <button
-                  onClick={() => onDelete(holding.ticker)}
-                  className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                  title="Delete holding"
-                >
-                  <svg className="w-3 h-3 text-red-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              )} */}
             </div>
           )}
         </div>

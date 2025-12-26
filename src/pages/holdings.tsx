@@ -220,10 +220,6 @@ export default function Holdings() {
   };
 
   const handleDeleteHolding = async (ticker: string) => {
-    if (!confirm(`Are you sure you want to delete ${ticker}?`)) {
-      return;
-    }
-
     try {
       const response = await fetch('/api/updateHolding', {
         method: 'POST',
@@ -243,25 +239,48 @@ export default function Holdings() {
         await refreshData();
       } else {
         const error = await response.json();
-        alert(`Error: ${error.error}`);
+        throw new Error(error.error);
       }
     } catch (error) {
       console.error('Error deleting holding:', error);
       alert('Failed to delete holding');
+      throw error;
     }
   };
 
   const handleSaveHolding = async (data: { ticker: string; quantity: number; averagePrice: number }) => {
     try {
+      const normalizedTicker = data.ticker.trim().toUpperCase();
+      const existingHolding = holdings.find(
+        (holding) => holding.ticker.toUpperCase() === normalizedTicker
+      );
+
+      let payload = {
+        ticker: normalizedTicker,
+        quantity: data.quantity,
+        averagePrice: data.averagePrice,
+        action: editModal.isNew ? 'add' : 'update' as 'add' | 'update',
+      };
+
+      if (editModal.isNew && existingHolding) {
+        const totalQuantity = existingHolding.quantity + data.quantity;
+        const totalValue = (existingHolding.quantity * existingHolding.averageBuyPrice) + (data.quantity * data.averagePrice);
+        const newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
+
+        payload = {
+          ticker: normalizedTicker,
+          quantity: totalQuantity,
+          averagePrice: Number(newAverage.toFixed(2)),
+          action: 'update',
+        };
+      }
+
       const response = await fetch('/api/updateHolding', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...data,
-          action: editModal.isNew ? 'add' : 'update'
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -546,6 +565,7 @@ export default function Holdings() {
         holding={editModal.holding}
         isNew={editModal.isNew}
         onSave={handleSaveHolding}
+        onDelete={handleDeleteHolding}
       />
     </div>
   );
