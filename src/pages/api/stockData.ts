@@ -1,6 +1,8 @@
 // src/pages/api/stockData.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+
+const yahooFinance = new YahooFinance();
 import { Holding } from '../../types/holding';
 
 // Initialize Edge Config
@@ -18,7 +20,7 @@ export default async function handler(
   // Set cache headers
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
   res.setHeader('Content-Type', 'application/json');
-  
+
   try {
     // Fetch holdings from Edge Config
     const response = await fetch(`https://api.vercel.com/v1/edge-config/${EDGE_CONFIG_ID}/items`, {
@@ -33,7 +35,7 @@ export default async function handler(
 
     const items = await response.json();
     const holdingsItem = items.find((item: any) => item.key === 'holdings');
-    
+
     if (!holdingsItem) {
       throw new Error('No holdings found in Edge Config');
     }
@@ -89,7 +91,7 @@ export default async function handler(
             unrealizedPLPercentage: 0
           };
         }
-          
+
         const lastTradedPrice = quote.regularMarketPrice || data.averagePrice;
         const dailyChange = quote.regularMarketChange || 0;
         const dailyChangePercentage = quote.regularMarketChangePercent || 0;

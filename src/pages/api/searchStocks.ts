@@ -1,7 +1,15 @@
 // src/pages/api/searchStocks.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import yahooFinance from 'yahoo-finance2';
-import type { Quote } from 'yahoo-finance2/dist/esm/src/modules/quote';
+import YahooFinance from 'yahoo-finance2';
+// import type { Quote } from 'yahoo-finance2'; // Removed to fix build
+interface Quote {
+  regularMarketPrice?: number;
+  regularMarketChange?: number;
+  regularMarketChangePercent?: number;
+  [key: string]: any;
+}
+
+const yahooFinance = new YahooFinance();
 
 interface StockData {
   // Search result fields
@@ -21,7 +29,7 @@ interface StockData {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { query } = req.query;
-  
+
   if (!query || typeof query !== 'string') {
     return res.status(400).json({ error: 'Query parameter is required' });
   }
@@ -42,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       exactResults: exactData.quotes?.length || 0,
       fuzzyResults: fuzzyData.quotes?.length || 0
     });
-    
+
     // Combine and deduplicate results
     const allQuotes = [
       ...(exactData.quotes || []),
@@ -54,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       new Map(allQuotes.map(quote => [quote.symbol, quote])).values()
     );
     console.log('Unique quotes:', uniqueQuotes.length);
-    
+
     // Filter and sort results
     const filteredStocks = uniqueQuotes
       .filter((quote) => {
@@ -63,12 +71,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Include stocks and ETFs from any exchange
         const validExchanges = ["BSE", "NSE", "NSI"];
         const symbol = quote.symbol.toString();
-        const isValidExchange = validExchanges.includes(quote.exchange) || 
-                              symbol.endsWith(".NS") || 
-                              symbol.endsWith(".BO");
-        const isValidType = ["EQUITY", "ETF"].includes(quote.quoteType) || 
-                          quote.typeDisp === "Equity";
-        
+        const isValidExchange = validExchanges.includes(quote.exchange) ||
+          symbol.endsWith(".NS") ||
+          symbol.endsWith(".BO");
+        const isValidType = ["EQUITY", "ETF"].includes(quote.quoteType) ||
+          quote.typeDisp === "Equity";
+
         return isValidExchange && isValidType;
       })
       .sort((a, b) => {
@@ -76,10 +84,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const queryUpper = query.toUpperCase();
         const aExactMatch = a.symbol === queryUpper || a.shortname?.toUpperCase() === queryUpper;
         const bExactMatch = b.symbol === queryUpper || b.shortname?.toUpperCase() === queryUpper;
-        
+
         if (aExactMatch && !bExactMatch) return -1;
         if (!aExactMatch && bExactMatch) return 1;
-        
+
         // Then sort by score (relevance)
         return (b.score || 0) - (a.score || 0);
       })

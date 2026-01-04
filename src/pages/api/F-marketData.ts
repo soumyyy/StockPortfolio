@@ -1,6 +1,8 @@
 // src/pages/api/F-marketData.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+
+const yahooFinance = new YahooFinance();
 
 interface MarketData {
   globalIndices: MarketIndex[];
@@ -16,7 +18,7 @@ interface MarketIndex {
   currency: string;
 }
 
-const GLOBAL_INDICES = [ 
+const GLOBAL_INDICES = [
   { symbol: '^DJI', name: 'Dow Jones' },
   { symbol: 'YM=F', name: 'Dow Futures' },  // Dow Jones Futures
   { symbol: 'INR=X', name: 'USD/INR' },    // USD/INR exchange rate

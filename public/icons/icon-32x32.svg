@@ -1,0 +1,15 @@
+
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple black background -->
+  <rect width="32" height="32" fill="#0A0A0A" rx="3.2"/>
+  
+  <!-- Cursive "portfolio" text -->
+  <text x="50%" y="50%" 
+        font-family="cursive, 'Brush Script MT', 'Lucida Handwriting', serif" 
+        font-size="12" 
+        font-weight="400" 
+        fill="#ffffff" 
+        text-anchor="middle" 
+        dominant-baseline="middle"
+        letter-spacing="1px">portfolio</text>
+</svg>
