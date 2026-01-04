@@ -1,8 +1,6 @@
 // src/pages/api/F-marketData.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import YahooFinance from 'yahoo-finance2';
-
-const yahooFinance = new YahooFinance();
+import yahooFinance from '../../lib/yahooFinance';
 
 interface MarketData {
   globalIndices: MarketIndex[];

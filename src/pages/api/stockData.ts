@@ -1,8 +1,8 @@
 // src/pages/api/stockData.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import YahooFinance from 'yahoo-finance2';
+import YahooFinance from '../../lib/yahooFinance';
 
-const yahooFinance = new YahooFinance();
+const yahooFinance = YahooFinance;
 import { Holding } from '../../types/holding';
 
 // Initialize Edge Config
@@ -43,77 +43,85 @@ export default async function handler(
     const holdingsData = holdingsItem.value;
 
     // Fetch real-time data for all tickers
-    const holdings = await Promise.all(
-      Object.entries(holdingsData).map(async ([ticker, data]: [string, any]): Promise<Holding> => {
-        let quote;
-        const hasSuffix = ticker.includes('.');
+    // Collect all symbols to fetch
+    const uniqueSymbols = new Set<string>();
 
-        if (hasSuffix) {
-          // If ticker already has a suffix, use it directly
-          try {
-            quote = await yahooFinance.quote(ticker);
-          } catch (error) {
-            console.error(`Error fetching data for suffixed ticker ${ticker}:`, error);
-            quote = undefined;
-          }
-        } else {
-          // Otherwise, try .NS and then .BO
-          try {
-            // First, try with NSE
-            quote = await yahooFinance.quote(ticker + '.NS');
-          } catch (nsError) {
-            console.warn(`Could not fetch ${ticker}.NS, trying ${ticker}.BO...`);
-            try {
-              // If NSE fails, try with BSE
-              quote = await yahooFinance.quote(ticker + '.BO');
-            } catch (boError) {
-              console.error(`Error fetching data for ${ticker} from both NSE and BSE:`, boError);
-              quote = undefined;
-            }
-          }
-        }
+    // We iterate holdingsData keys
+    Object.keys(holdingsData).forEach((ticker) => {
+      if (ticker.includes('.')) {
+        uniqueSymbols.add(ticker);
+      } else {
+        uniqueSymbols.add(`${ticker}.NS`);
+        uniqueSymbols.add(`${ticker}.BO`);
+      }
+    });
 
-        // If quote is still not found, return fallback data
-        if (!quote) {
-          console.error(`Data for ticker ${ticker} not found on NSE or BSE. Using fallback data.`);
-          return {
-            ticker,
-            name: ticker, // Fallback name
-            buyPrice: data.averagePrice,
-            quantity: data.quantity,
-            lastTradedPrice: data.averagePrice, // Fallback price
-            dailyChange: 0,
-            dailyChangePercentage: 0,
-            dayRange: 'N/A',
-            volume: 0,
-            averageBuyPrice: data.averagePrice,
-            unrealizedPL: 0,
-            unrealizedPLPercentage: 0
-          };
-        }
+    const symbols = Array.from(uniqueSymbols);
+    console.log(`Fetching ${symbols.length} symbols...`);
 
-        const lastTradedPrice = quote.regularMarketPrice || data.averagePrice;
-        const dailyChange = quote.regularMarketChange || 0;
-        const dailyChangePercentage = quote.regularMarketChangePercent || 0;
-        const unrealizedPL = (lastTradedPrice - data.averagePrice) * data.quantity;
-        const unrealizedPLPercentage = ((lastTradedPrice - data.averagePrice) / data.averagePrice) * 100;
+    let quotes: any[] = [];
+    try {
+      if (symbols.length > 0) {
+        // Use validateResult: false to allow partial success if possible or less strict validation
+        quotes = await yahooFinance.quote(symbols, {}, { validateResult: false });
+      }
+    } catch (e) {
+      console.error("Batch quote fetch failed:", e);
+      quotes = [];
+    }
 
+    const quoteMap = new Map(quotes.map(q => [q.symbol.toUpperCase(), q]));
+
+    const holdings = Object.entries(holdingsData).map(([ticker, data]: [string, any]): Holding => {
+      let quote;
+      const tickerUpper = ticker.toUpperCase();
+      if (ticker.includes('.')) {
+        quote = quoteMap.get(tickerUpper);
+      } else {
+        // Prefer NS, then BO
+        quote = quoteMap.get(`${tickerUpper}.NS`) || quoteMap.get(`${tickerUpper}.BO`);
+      }
+
+      // If quote is still not found, return fallback data
+      if (!quote) {
+        console.error(`Data for ticker ${ticker} not found on NSE or BSE (checked batch results). Using fallback data.`);
         return {
           ticker,
-          name: quote.longName || quote.shortName || ticker,
+          name: ticker, // Fallback name
           buyPrice: data.averagePrice,
           quantity: data.quantity,
-          lastTradedPrice,
-          dailyChange,
-          dailyChangePercentage,
-          dayRange: `${quote.regularMarketDayLow?.toFixed(2) || 'N/A'}-${quote.regularMarketDayHigh?.toFixed(2) || 'N/A'}`,
-          volume: quote.regularMarketVolume || 0,
+          lastTradedPrice: data.averagePrice, // Fallback price
+          dailyChange: 0,
+          dailyChangePercentage: 0,
+          dayRange: 'N/A',
+          volume: 0,
           averageBuyPrice: data.averagePrice,
-          unrealizedPL,
-          unrealizedPLPercentage
+          unrealizedPL: 0,
+          unrealizedPLPercentage: 0
         };
-      })
-    );
+      }
+
+      const lastTradedPrice = quote.regularMarketPrice || data.averagePrice;
+      const dailyChange = quote.regularMarketChange || 0;
+      const dailyChangePercentage = quote.regularMarketChangePercent || 0;
+      const unrealizedPL = (lastTradedPrice - data.averagePrice) * data.quantity;
+      const unrealizedPLPercentage = ((lastTradedPrice - data.averagePrice) / data.averagePrice) * 100;
+
+      return {
+        ticker,
+        name: quote.longName || quote.shortName || ticker,
+        buyPrice: data.averagePrice,
+        quantity: data.quantity,
+        lastTradedPrice,
+        dailyChange,
+        dailyChangePercentage,
+        dayRange: `${quote.regularMarketDayLow?.toFixed(2) || 'N/A'}-${quote.regularMarketDayHigh?.toFixed(2) || 'N/A'}`,
+        volume: quote.regularMarketVolume || 0,
+        averageBuyPrice: data.averagePrice,
+        unrealizedPL,
+        unrealizedPLPercentage
+      };
+    });
 
     res.status(200).json(holdings);
   } catch (error) {

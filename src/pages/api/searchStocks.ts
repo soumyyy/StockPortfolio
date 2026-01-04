@@ -1,15 +1,7 @@
 // src/pages/api/searchStocks.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import YahooFinance from 'yahoo-finance2';
-// import type { Quote } from 'yahoo-finance2'; // Removed to fix build
-interface Quote {
-  regularMarketPrice?: number;
-  regularMarketChange?: number;
-  regularMarketChangePercent?: number;
-  [key: string]: any;
-}
-
-const yahooFinance = new YahooFinance();
+import yahooFinance from '../../lib/yahooFinance';
+import type { Quote } from 'yahoo-finance2/esm/src/modules/quote';
 
 interface StockData {
   // Search result fields
@@ -20,6 +12,7 @@ interface StockData {
   quoteType?: string;
   score?: number;
   typeDisp?: string;
+
 
   // Price data fields
   regularMarketPrice: number | null;
@@ -103,66 +96,70 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json([]);
     }
 
+    // Fetch real-time price data using yahoo-finance2
+    const symbols = filteredStocks.map(stock => {
+      const symbol = stock.symbol;
+      if (!symbol.endsWith('.NS') && !symbol.endsWith('.BO')) {
+        return `${symbol}.NS`;
+      }
+      return symbol;
+    });
+
+    console.log('Fetching prices for:', symbols);
+
+    let quotes: Quote[] = [];
     try {
-      // Fetch real-time price data using yahoo-finance2
-      const symbols = filteredStocks.map(stock => {
-        const symbol = stock.symbol;
-        if (!symbol.endsWith('.NS') && !symbol.endsWith('.BO')) {
-          return `${symbol}.NS`;
-        }
-        return symbol;
-      });
-
-      console.log('Fetching prices for:', symbols);
-
-      // Get quotes for all symbols in parallel
-      const quotePromises = symbols.map(async (symbol) => {
-        try {
-          const result = await yahooFinance.quote(symbol);
-          return result as unknown as Quote;
-        } catch (error) {
-          console.error(`Error fetching quote for ${symbol}:`, error);
-          return null;
-        }
-      });
-
-      const quotes = await Promise.all(quotePromises);
-
-      console.log('Raw quotes:', quotes.map(q => ({
-        price: (q as Quote | null)?.regularMarketPrice,
-        change: (q as Quote | null)?.regularMarketChange,
-        changePercent: (q as Quote | null)?.regularMarketChangePercent
-      })));
-
-      // Merge price data with stock info
-      const stocks: StockData[] = filteredStocks.map((stock, index) => {
-        const quoteData = quotes[index] as Quote | null;
-        const mappedStock = {
-          ...stock,
-          regularMarketPrice: Number(quoteData?.regularMarketPrice) || 0,
-          regularMarketChange: Number(quoteData?.regularMarketChange) || 0,
-          regularMarketChangePercent: Number(quoteData?.regularMarketChangePercent) || 0
-        };
-        console.log('Mapped stock:', {
-          symbol: mappedStock.symbol,
-          price: mappedStock.regularMarketPrice,
-          change: mappedStock.regularMarketChange,
-          changePercent: mappedStock.regularMarketChangePercent
-        });
-        return mappedStock;
-      });
-
-      console.log('Final stock data:', stocks.map(s => ({
-        symbol: s.symbol,
-        price: s.regularMarketPrice,
-        change: s.regularMarketChange
-      })));
-
-      res.status(200).json(stocks);
-    } catch (priceError) {
-      console.error('Price fetch error:', priceError);
-      res.status(200).json(filteredStocks);
+      // Get quotes for all symbols in a single batch request
+      quotes = await yahooFinance.quote(symbols);
+    } catch (e) {
+      console.error("Batch quote fetch failed:", e);
+      quotes = [];
     }
+
+    const quoteMap = new Map(quotes.map(q => [q.symbol.toUpperCase(), q]));
+
+    console.log('Raw quotes:', quotes.map(q => ({
+      symbol: q.symbol,
+      price: q.regularMarketPrice,
+      change: q.regularMarketChange,
+      changePercent: q.regularMarketChangePercent
+    })));
+
+    // Merge price data with stock info
+    const stocks: StockData[] = filteredStocks.map((stock) => {
+      // We need to resolve which symbol we used to fetch the quote
+      const stockSymbolUpper = stock.symbol.toUpperCase();
+      const querySymbol = stockSymbolUpper.endsWith('.NS') || stockSymbolUpper.endsWith('.BO') ? stockSymbolUpper : `${stockSymbolUpper}.NS`;
+      // Try to find by the query symbol
+      let quoteData = quoteMap.get(querySymbol);
+
+      // If not found, try without suffix just in case
+      if (!quoteData) {
+        quoteData = quoteMap.get(stockSymbolUpper);
+      }
+
+      const mappedStock = {
+        ...stock,
+        regularMarketPrice: Number(quoteData?.regularMarketPrice) || 0,
+        regularMarketChange: Number(quoteData?.regularMarketChange) || 0,
+        regularMarketChangePercent: Number(quoteData?.regularMarketChangePercent) || 0
+      };
+      console.log('Mapped stock:', {
+        symbol: mappedStock.symbol,
+        price: mappedStock.regularMarketPrice,
+        change: mappedStock.regularMarketChange,
+        changePercent: mappedStock.regularMarketChangePercent
+      });
+      return mappedStock;
+    });
+
+    console.log('Final stock data:', stocks.map(s => ({
+      symbol: s.symbol,
+      price: s.regularMarketPrice,
+      change: s.regularMarketChange
+    })));
+
+    res.status(200).json(stocks);
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ error: 'Failed to fetch stocks' });
