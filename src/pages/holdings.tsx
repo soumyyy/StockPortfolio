@@ -1,9 +1,8 @@
-import { useState, useRef, Suspense, lazy, useCallback } from 'react';
+import { useState, useRef, Suspense, lazy } from 'react';
 import { Holding } from '../types/holding';
 import Link from 'next/link';
-import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { useRouter } from 'next/router';
 import { useHoldingsData, useIndicesData } from '../hooks/usePortfolioData';
-import PullToRefresh from '../components/PullToRefresh';
 import EditHoldingModal from '../components/EditHoldingModal';
 
 // Lazy load components for better performance
@@ -91,6 +90,7 @@ const formatNumber = (num: number) => {
 };
 
 export default function Holdings() {
+  const router = useRouter();
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'alphabetical', direction: 'asc' });
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,7 +104,6 @@ export default function Holdings() {
     data: rawIndices,
     error: indicesError,
     isLoading: isIndicesLoading,
-    refresh: refreshIndices,
   } = useIndicesData();
   const isLoading = isHoldingsLoading || isIndicesLoading;
   const indices = rawIndices.map((index) => ({
@@ -121,21 +120,6 @@ export default function Holdings() {
     isOpen: false,
     holding: null,
     isNew: false
-  });
-
-  // Pull to refresh functionality
-  const refreshData = useCallback(async () => {
-    try {
-      await Promise.all([refreshIndices(true), refreshHoldings(true)]);
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    }
-  }, [refreshHoldings, refreshIndices]);
-
-  const { isPulling, isRefreshing, pullDistance, canRefresh } = usePullToRefresh({
-    onRefresh: refreshData,
-    threshold: 80,
-    resistance: 0.5,
   });
 
   // Edit/Delete functions
@@ -258,20 +242,21 @@ export default function Holdings() {
 
   return isLoading ? <LoadingSkeleton /> : (
     <div className="min-h-screen bg-[#0A0A0A] text-white/90 pt-4 pb-6 safe-area-inset-top pb-safe">
-      <PullToRefresh
-        isPulling={isPulling}
-        isRefreshing={isRefreshing}
-        pullDistance={pullDistance}
-        canRefresh={canRefresh}
-      />
       <div className="max-w-5xl mx-auto px-4 space-y-6">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <Link href="/" className="inline-flex items-center text-sm text-white/70 hover:text-white/90 transition-colors">
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Home
           </Link>
+          <button
+            onClick={() => router.reload()}
+            className="px-3 py-1.5 text-sm text-white/70 hover:text-white/90 hover:bg-white/[0.03] rounded-lg border border-white/[0.06] transition-colors"
+            aria-label="Reload data"
+          >
+            Reload
+          </button>
         </div>
         <Suspense fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
           <MarketIndices indices={indices} error={Boolean(indicesError)} />

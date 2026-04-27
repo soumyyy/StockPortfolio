@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import debounce from 'lodash.debounce';
-import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useHoldingsData, useIndicesData } from '../hooks/usePortfolioData';
-import PullToRefresh from '../components/PullToRefresh';
 
 // Lazy load components for better performance
 const PortfolioSummary = lazy(() => import('../components/PortfolioSummary'));
@@ -89,6 +88,7 @@ const SkeletonGlobalMarkets = () => (
 );
 
 export default function Home() {
+  const router = useRouter();
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -97,29 +97,12 @@ export default function Home() {
   const {
     data: holdings,
     isLoading: isHoldingsLoading,
-    refresh: refreshHoldings,
   } = useHoldingsData();
   const {
     data: indices,
     isLoading: isIndicesLoading,
-    refresh: refreshIndices,
   } = useIndicesData();
   const isPageLoading = isHoldingsLoading || isIndicesLoading;
-
-  // Pull to refresh functionality
-  const refreshData = useCallback(async () => {
-    try {
-      await Promise.all([refreshHoldings(true), refreshIndices(true)]);
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    }
-  }, [refreshHoldings, refreshIndices]);
-
-  const { isPulling, isRefreshing, pullDistance, canRefresh } = usePullToRefresh({
-    onRefresh: refreshData,
-    threshold: 80,
-    resistance: 0.5,
-  });
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
@@ -191,12 +174,6 @@ export default function Home() {
 
   return isPageLoading ? <LoadingSkeleton /> : (
     <div className="min-h-screen bg-[#0A0A0A] text-white/90 pt-4 pb-6 safe-area-inset-top pb-safe">
-      <PullToRefresh
-        isPulling={isPulling}
-        isRefreshing={isRefreshing}
-        pullDistance={pullDistance}
-        canRefresh={canRefresh}
-      />
       <div className="max-w-5xl mx-auto px-4 space-y-6">
         {/* Search Section */}
         <div className="flex items-center justify-between mb-6">
@@ -254,26 +231,35 @@ export default function Home() {
               </div>
             </div>
           </div>
-          <button
-            onClick={toggleSearch}
-            className={`p-2 hover:bg-white/[0.03] rounded-lg transition-all duration-300 ease-in-out transform ${
-              showSearch ? 'hidden sm:block opacity-0 sm:opacity-100 scale-0 sm:scale-100' : 'block opacity-100 scale-100'
-            }`}
-            aria-label="Toggle search"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="w-5 h-5 text-white/60"
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.reload()}
+              className="px-3 py-1.5 text-sm text-white/70 hover:text-white/90 hover:bg-white/[0.03] rounded-lg border border-white/[0.06] transition-colors"
+              aria-label="Reload data"
             >
-              <path
-                fillRule="evenodd"
-                d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </button>
+              Reload
+            </button>
+            <button
+              onClick={toggleSearch}
+              className={`p-2 hover:bg-white/[0.03] rounded-lg transition-all duration-300 ease-in-out transform ${
+                showSearch ? 'hidden sm:block opacity-0 sm:opacity-100 scale-0 sm:scale-100' : 'block opacity-100 scale-100'
+              }`}
+              aria-label="Toggle search"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="w-5 h-5 text-white/60"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Search Results */}

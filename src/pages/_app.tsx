@@ -6,8 +6,11 @@ import { useEffect } from 'react'
 
 function MyApp({ Component, pageProps }: AppProps) {
   useEffect(() => {
-    // Register service worker
-    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+    if (!('serviceWorker' in navigator)) {
+      return;
+    }
+
+    if (process.env.NODE_ENV === 'production') {
       navigator.serviceWorker.register('/sw.js')
         .then((registration) => {
           console.log('SW registered: ', registration);
@@ -15,7 +18,14 @@ function MyApp({ Component, pageProps }: AppProps) {
         .catch((registrationError) => {
           console.log('SW registration failed: ', registrationError);
         });
+      return;
     }
+
+    navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .catch((error) => {
+        console.log('SW cleanup failed: ', error);
+      });
   }, []);
 
   return (
