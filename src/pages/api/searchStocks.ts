@@ -1,7 +1,6 @@
 // src/pages/api/searchStocks.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import yahooFinance from '../../lib/yahooFinance';
-import type { Quote } from 'yahoo-finance2/esm/src/modules/quote';
 
 interface StockData {
   // Search result fields
@@ -20,6 +19,76 @@ interface StockData {
   regularMarketChangePercent: number | null;
 }
 
+type QuoteLike = {
+  symbol: string;
+  regularMarketPrice?: number;
+  regularMarketChange?: number;
+  regularMarketChangePercent?: number;
+};
+
+type SearchQuoteLike = {
+  symbol: string;
+  shortname?: string;
+  longname?: string;
+  exchange?: string;
+  quoteType?: string;
+  score?: number;
+  typeDisp?: string;
+};
+
+type SearchCacheEntry = {
+  data: StockData[];
+  updatedAt: number;
+};
+
+type ExchangeSuffix = '.NS' | '.BO';
+
+const SEARCH_CACHE_TTL_MS = 30_000;
+const SEARCH_QUOTES_LIMIT = 12;
+const searchCache = new Map<string, SearchCacheEntry>();
+const preferredExchangeByTicker = new Map<string, ExchangeSuffix>();
+
+function getPreferredSymbols(ticker: string) {
+  const normalizedTicker = ticker.toUpperCase();
+  if (normalizedTicker.endsWith('.NS') || normalizedTicker.endsWith('.BO')) {
+    return [normalizedTicker];
+  }
+
+  const preferredSuffix = preferredExchangeByTicker.get(normalizedTicker);
+  if (preferredSuffix) {
+    return [`${normalizedTicker}${preferredSuffix}`];
+  }
+
+  return [`${normalizedTicker}.NS`, `${normalizedTicker}.BO`];
+}
+
+async function fetchQuotes(symbols: string[]) {
+  if (symbols.length === 0) {
+    return [] as QuoteLike[];
+  }
+
+  try {
+    return await yahooFinance.quote(symbols, {}, { validateResult: false });
+  } catch (error) {
+    console.error('Batch quote fetch failed:', error);
+    return [] as QuoteLike[];
+  }
+}
+
+function getCachedSearchResults(query: string) {
+  const cached = searchCache.get(query);
+  if (!cached) {
+    return null;
+  }
+
+  if (Date.now() - cached.updatedAt > SEARCH_CACHE_TTL_MS) {
+    searchCache.delete(query);
+    return null;
+  }
+
+  return cached.data;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { query } = req.query;
 
@@ -27,34 +96,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Query parameter is required' });
   }
 
-  try {
-    // Make both exact and fuzzy requests in parallel
-    const [exactRes, fuzzyRes] = await Promise.all([
-      fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${query}&quotesCount=20&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&enableCb=true&region=IN`),
-      fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${query}&quotesCount=20&newsCount=0&enableFuzzyQuery=true&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&enableCb=true&region=IN`)
-    ]);
+  const normalizedQuery = query.trim();
+  if (normalizedQuery.length < 2) {
+    return res.status(200).json([]);
+  }
 
-    if (!exactRes.ok || !fuzzyRes.ok) {
+  res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120');
+
+  const cachedResults = getCachedSearchResults(normalizedQuery.toUpperCase());
+  if (cachedResults) {
+    return res.status(200).json(cachedResults);
+  }
+
+  try {
+    const searchResponse = await fetch(
+      `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(normalizedQuery)}&quotesCount=${SEARCH_QUOTES_LIMIT}&newsCount=0&enableFuzzyQuery=true&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&enableCb=true&region=IN`
+    );
+
+    if (!searchResponse.ok) {
       throw new Error('Failed to fetch search results');
     }
 
-    const [exactData, fuzzyData] = await Promise.all([exactRes.json(), fuzzyRes.json()]);
-    console.log('Search results:', {
-      exactResults: exactData.quotes?.length || 0,
-      fuzzyResults: fuzzyData.quotes?.length || 0
-    });
+    const searchData = await searchResponse.json();
 
-    // Combine and deduplicate results
-    const allQuotes = [
-      ...(exactData.quotes || []),
-      ...(fuzzyData.quotes || [])
-    ].filter(quote => quote && quote.symbol);
-
-    // Remove duplicates based on symbol
+    const allQuotes: SearchQuoteLike[] = (searchData.quotes || []).filter((quote: SearchQuoteLike) => quote && quote.symbol);
     const uniqueQuotes = Array.from(
-      new Map(allQuotes.map(quote => [quote.symbol, quote])).values()
+      new Map(allQuotes.map((quote: SearchQuoteLike) => [quote.symbol, quote])).values()
     );
-    console.log('Unique quotes:', uniqueQuotes.length);
 
     // Filter and sort results
     const filteredStocks = uniqueQuotes
@@ -64,17 +132,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Include stocks and ETFs from any exchange
         const validExchanges = ["BSE", "NSE", "NSI"];
         const symbol = quote.symbol.toString();
-        const isValidExchange = validExchanges.includes(quote.exchange) ||
+        const exchange = quote.exchange || '';
+        const quoteType = quote.quoteType || '';
+        const isValidExchange = validExchanges.includes(exchange) ||
           symbol.endsWith(".NS") ||
           symbol.endsWith(".BO");
-        const isValidType = ["EQUITY", "ETF"].includes(quote.quoteType) ||
+        const isValidType = ["EQUITY", "ETF"].includes(quoteType) ||
           quote.typeDisp === "Equity";
 
         return isValidExchange && isValidType;
       })
       .sort((a, b) => {
         // Prioritize exact matches in symbol or name
-        const queryUpper = query.toUpperCase();
+        const queryUpper = normalizedQuery.toUpperCase();
         const aExactMatch = a.symbol === queryUpper || a.shortname?.toUpperCase() === queryUpper;
         const bExactMatch = b.symbol === queryUpper || b.shortname?.toUpperCase() === queryUpper;
 
@@ -84,12 +154,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Then sort by score (relevance)
         return (b.score || 0) - (a.score || 0);
       })
-      .slice(0, 20);
-
-    console.log('Filtered stocks:', {
-      count: filteredStocks.length,
-      symbols: filteredStocks.map(s => s.symbol)
-    });
+      .slice(0, SEARCH_QUOTES_LIMIT);
 
     // If no stocks found, return empty array
     if (filteredStocks.length === 0) {
@@ -97,45 +162,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Fetch real-time price data using yahoo-finance2
-    const symbols = filteredStocks.map(stock => {
-      const symbol = stock.symbol;
-      if (!symbol.endsWith('.NS') && !symbol.endsWith('.BO')) {
-        return `${symbol}.NS`;
+    const symbols = Array.from(
+      new Set(filteredStocks.flatMap((stock) => getPreferredSymbols(stock.symbol)))
+    );
+
+    const quotes: QuoteLike[] = await fetchQuotes(symbols);
+    const quoteMap = new Map(quotes.map((q: QuoteLike) => [q.symbol.toUpperCase(), q]));
+
+    const fallbackSymbols = filteredStocks.flatMap((stock) => {
+      const symbol = stock.symbol.toUpperCase();
+      if (symbol.endsWith('.NS') || symbol.endsWith('.BO')) {
+        return [];
       }
-      return symbol;
+
+      const preferredSuffix = preferredExchangeByTicker.get(symbol);
+      if (!preferredSuffix) {
+        return [];
+      }
+
+      const preferredSymbol = `${symbol}${preferredSuffix}`;
+      if (quoteMap.has(preferredSymbol)) {
+        return [];
+      }
+
+      const fallbackSuffix: ExchangeSuffix = preferredSuffix === '.NS' ? '.BO' : '.NS';
+      return [`${symbol}${fallbackSuffix}`];
     });
 
-    console.log('Fetching prices for:', symbols);
-
-    let quotes: Quote[] = [];
-    try {
-      // Get quotes for all symbols in a single batch request
-      quotes = await yahooFinance.quote(symbols);
-    } catch (e) {
-      console.error("Batch quote fetch failed:", e);
-      quotes = [];
-    }
-
-    const quoteMap = new Map(quotes.map(q => [q.symbol.toUpperCase(), q]));
-
-    console.log('Raw quotes:', quotes.map(q => ({
-      symbol: q.symbol,
-      price: q.regularMarketPrice,
-      change: q.regularMarketChange,
-      changePercent: q.regularMarketChangePercent
-    })));
+    const fallbackQuotes: QuoteLike[] = await fetchQuotes(fallbackSymbols);
+    fallbackQuotes.forEach((quote: QuoteLike) => {
+      quoteMap.set(quote.symbol.toUpperCase(), quote);
+    });
 
     // Merge price data with stock info
     const stocks: StockData[] = filteredStocks.map((stock) => {
       // We need to resolve which symbol we used to fetch the quote
       const stockSymbolUpper = stock.symbol.toUpperCase();
-      const querySymbol = stockSymbolUpper.endsWith('.NS') || stockSymbolUpper.endsWith('.BO') ? stockSymbolUpper : `${stockSymbolUpper}.NS`;
-      // Try to find by the query symbol
-      let quoteData = quoteMap.get(querySymbol);
+      const quoteData = stockSymbolUpper.endsWith('.NS') || stockSymbolUpper.endsWith('.BO')
+        ? quoteMap.get(stockSymbolUpper)
+        : quoteMap.get(`${stockSymbolUpper}.NS`) || quoteMap.get(`${stockSymbolUpper}.BO`);
 
-      // If not found, try without suffix just in case
-      if (!quoteData) {
-        quoteData = quoteMap.get(stockSymbolUpper);
+      if (!stockSymbolUpper.endsWith('.NS') && !stockSymbolUpper.endsWith('.BO')) {
+        if (quoteMap.has(`${stockSymbolUpper}.NS`)) {
+          preferredExchangeByTicker.set(stockSymbolUpper, '.NS');
+        } else if (quoteMap.has(`${stockSymbolUpper}.BO`)) {
+          preferredExchangeByTicker.set(stockSymbolUpper, '.BO');
+        }
       }
 
       const mappedStock = {
@@ -144,20 +216,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         regularMarketChange: Number(quoteData?.regularMarketChange) || 0,
         regularMarketChangePercent: Number(quoteData?.regularMarketChangePercent) || 0
       };
-      console.log('Mapped stock:', {
-        symbol: mappedStock.symbol,
-        price: mappedStock.regularMarketPrice,
-        change: mappedStock.regularMarketChange,
-        changePercent: mappedStock.regularMarketChangePercent
-      });
       return mappedStock;
     });
 
-    console.log('Final stock data:', stocks.map(s => ({
-      symbol: s.symbol,
-      price: s.regularMarketPrice,
-      change: s.regularMarketChange
-    })));
+    searchCache.set(normalizedQuery.toUpperCase(), {
+      data: stocks,
+      updatedAt: Date.now(),
+    });
 
     res.status(200).json(stocks);
   } catch (error) {

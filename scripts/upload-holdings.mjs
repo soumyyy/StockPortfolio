@@ -58,6 +58,12 @@ try {
   async function uploadHoldings() {
     try {
       console.log('Uploading holdings to Edge Config...');
+
+      const items = Object.entries(holdings).map(([ticker, value]) => ({
+        key: `holding:${ticker.trim().toUpperCase()}`,
+        value,
+        operation: 'upsert'
+      }));
   
       const response = await fetch(`https://api.vercel.com/v1/edge-config/${EDGE_CONFIG_ID}/items`, {
         method: 'PATCH',
@@ -66,13 +72,7 @@ try {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          items: [
-            {
-              key: 'holdings',
-              value: holdings,
-              operation: 'upsert'  // Using upsert to create or update
-            }
-          ]
+          items
         }),
       });
   

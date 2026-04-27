@@ -16,6 +16,14 @@ interface MarketIndex {
   currency: string;
 }
 
+type QuoteLike = {
+  symbol: string;
+  regularMarketPrice?: number;
+  regularMarketChange?: number;
+  regularMarketChangePercent?: number;
+  currency?: string;
+};
+
 const GLOBAL_INDICES = [
   { symbol: '^DJI', name: 'Dow Jones' },
   { symbol: 'YM=F', name: 'Dow Futures' },  // Dow Jones Futures
@@ -37,59 +45,37 @@ export default async function handler(
   res: NextApiResponse<MarketData>
 ) {
   try {
-    // Fetch global indices data
-    const indicesData = await Promise.all(
-      GLOBAL_INDICES.map(async (index) => {
-        try {
-          const quote = await yahooFinance.quote(index.symbol);
-          return {
-            symbol: index.symbol,
-            name: index.name,
-            price: quote.regularMarketPrice || 0,
-            change: quote.regularMarketChange || 0,
-            changePercent: quote.regularMarketChangePercent || 0,
-            currency: quote.currency || (index.symbol === 'IN=F' ? 'INR' : 'USD')
-          };
-        } catch (error) {
-          console.error(`Error fetching ${index.name}:`, error);
-          return {
-            symbol: index.symbol,
-            name: index.name,
-            price: 0,
-            change: 0,
-            changePercent: 0,
-            currency: index.symbol === 'IN=F' ? 'INR' : 'USD'
-          };
-        }
-      })
-    );
+    const allSymbols = [
+      ...GLOBAL_INDICES.map((index) => index.symbol),
+      ...CRYPTO_SYMBOLS.map((crypto) => crypto.symbol)
+    ];
 
-    // Fetch crypto data
-    const cryptoData = await Promise.all(
-      CRYPTO_SYMBOLS.map(async (crypto) => {
-        try {
-          const quote = await yahooFinance.quote(crypto.symbol);
-          return {
-            symbol: crypto.symbol,
-            name: crypto.name,
-            price: quote.regularMarketPrice || 0,
-            change: quote.regularMarketChange || 0,
-            changePercent: quote.regularMarketChangePercent || 0,
-            currency: 'USD'
-          };
-        } catch (error) {
-          console.error(`Error fetching ${crypto.name}:`, error);
-          return {
-            symbol: crypto.symbol,
-            name: crypto.name,
-            price: 0,
-            change: 0,
-            changePercent: 0,
-            currency: 'USD'
-          };
-        }
-      })
-    );
+    const quotes: QuoteLike[] = await yahooFinance.quote(allSymbols, {}, { validateResult: false });
+    const quoteMap = new Map(quotes.map((quote: QuoteLike) => [quote.symbol, quote]));
+
+    const indicesData = GLOBAL_INDICES.map((index) => {
+      const quote = quoteMap.get(index.symbol);
+      return {
+        symbol: index.symbol,
+        name: index.name,
+        price: quote?.regularMarketPrice || 0,
+        change: quote?.regularMarketChange || 0,
+        changePercent: quote?.regularMarketChangePercent || 0,
+        currency: quote?.currency || (index.symbol === 'INR=X' ? 'INR' : 'USD')
+      };
+    });
+
+    const cryptoData = CRYPTO_SYMBOLS.map((crypto) => {
+      const quote = quoteMap.get(crypto.symbol);
+      return {
+        symbol: crypto.symbol,
+        name: crypto.name,
+        price: quote?.regularMarketPrice || 0,
+        change: quote?.regularMarketChange || 0,
+        changePercent: quote?.regularMarketChangePercent || 0,
+        currency: 'USD'
+      };
+    });
 
     const marketData: MarketData = {
       globalIndices: indicesData,

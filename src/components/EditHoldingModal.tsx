@@ -279,7 +279,7 @@ export default function EditHoldingModal({
                   </svg>
                   <span className="text-sm font-medium">Delete {formData.ticker}</span>
                 </div>
-                <p className="text-xs text-white/70">Are you sure you've sold this Holding?</p>
+                <p className="text-xs text-white/70">Are you sure you&apos;ve sold this Holding?</p>
                 <div className="flex gap-2">
                   <button
                     type="button"

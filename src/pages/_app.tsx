@@ -1,15 +1,8 @@
 // pages/_app.tsx
 import '../styles/globals.css'
 import type { AppProps } from 'next/app'
-import { Inter } from 'next/font/google'
 import Head from 'next/head'
 import { useEffect } from 'react'
-
-const inter = Inter({ 
-  subsets: ['latin'],
-  display: 'swap',
-  preload: true,
-})
 
 function MyApp({ Component, pageProps }: AppProps) {
   useEffect(() => {
@@ -38,9 +31,8 @@ function MyApp({ Component, pageProps }: AppProps) {
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="preconnect" href="https://query1.finance.yahoo.com" />
-        <link rel="preconnect" href="https://api.vercel.com" />
       </Head>
-      <main className={inter.className}>
+      <main>
         <div className="min-h-screen bg-[#0A0A0A] text-white/90">
           <Component {...pageProps} />
         </div>

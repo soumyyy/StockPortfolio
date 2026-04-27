@@ -12,13 +12,6 @@ interface StockCardProps {
 }
 
 const StockCard: React.FC<StockCardProps> = ({ stock }) => {
-  console.log('StockCard rendering:', {
-    ticker: stock.ticker,
-    price: stock.price,
-    change: stock.change,
-    changePercent: stock.changePercent
-  });
-
   const isPositive = stock.change > 0;
 
   const formatNumber = (num: number) => {

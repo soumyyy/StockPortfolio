@@ -1,18 +1,4 @@
-import { useState, useEffect } from 'react';
-
-interface MarketIndex {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  currency: string;
-}
-
-interface MarketData {
-  globalIndices: MarketIndex[];
-  crypto: MarketIndex[];
-}
+import { GlobalMarketEntry, useGlobalMarketsData } from '../hooks/usePortfolioData';
 
 const formatNumber = (num: number, minimumFractionDigits: number = 2) => {
   return new Intl.NumberFormat('en-US', {
@@ -26,7 +12,7 @@ const formatCurrency = (value: number, currency: string) => {
   return `${formatNumber(value)} ${currency}`;
 };
 
-const MarketCard = ({ data }: { data: MarketIndex }) => {
+const MarketCard = ({ data }: { data: GlobalMarketEntry }) => {
   const isPositive = data.change >= 0;
   const changeColor = isPositive ? 'text-green-500' : 'text-red-500';
 
@@ -53,29 +39,7 @@ const MarketCard = ({ data }: { data: MarketIndex }) => {
 };
 
 export default function GlobalMarkets() {
-  const [marketData, setMarketData] = useState<MarketData>({
-    globalIndices: [],
-    crypto: []
-  });
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchMarketData = async () => {
-      try {
-        const response = await fetch('/api/F-marketData');
-        const data = await response.json();
-        setMarketData(data);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching market data:', error);
-        setIsLoading(false);
-      }
-    };
-
-    fetchMarketData();
-    const interval = setInterval(fetchMarketData, 300000); // 5 minutes
-    return () => clearInterval(interval);
-  }, []);
+  const { data: marketData, isLoading } = useGlobalMarketsData();
 
   if (isLoading) {
     return (

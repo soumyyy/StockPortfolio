@@ -1,16 +1,52 @@
 // src/pages/api/stockData.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import YahooFinance from '../../lib/yahooFinance';
+import { fetchEdgeConfigItems, readHoldingsFromItems } from '../../lib/edgeConfigHoldings';
 
 const yahooFinance = YahooFinance;
 import { Holding } from '../../types/holding';
 
-// Initialize Edge Config
-const EDGE_CONFIG_ID = process.env.EDGE_CONFIG_ID;
-const EDGE_CONFIG_TOKEN = process.env.VERCEL_ACCESS_TOKEN;
+type ExchangeSuffix = '.NS' | '.BO';
+type QuoteLike = {
+  symbol: string;
+  longName?: string;
+  shortName?: string;
+  regularMarketPrice?: number;
+  regularMarketChange?: number;
+  regularMarketChangePercent?: number;
+  regularMarketDayLow?: number;
+  regularMarketDayHigh?: number;
+  regularMarketVolume?: number;
+};
 
-if (!EDGE_CONFIG_ID || !EDGE_CONFIG_TOKEN) {
-  throw new Error('Edge Config environment variables are not set');
+const preferredExchangeByTicker = new Map<string, ExchangeSuffix>();
+
+function getPreferredSymbols(ticker: string) {
+  const normalizedTicker = ticker.toUpperCase();
+
+  if (normalizedTicker.includes('.')) {
+    return [normalizedTicker];
+  }
+
+  const preferredSuffix = preferredExchangeByTicker.get(normalizedTicker);
+  if (preferredSuffix) {
+    return [`${normalizedTicker}${preferredSuffix}`];
+  }
+
+  return [`${normalizedTicker}.NS`, `${normalizedTicker}.BO`];
+}
+
+async function fetchQuotes(symbols: string[]) {
+  if (symbols.length === 0) {
+    return [] as QuoteLike[];
+  }
+
+  try {
+    return await yahooFinance.quote(symbols, {}, { validateResult: false });
+  } catch (error) {
+    console.error('Batch quote fetch failed:', error);
+    return [] as QuoteLike[];
+  }
 }
 
 export default async function handler(
@@ -22,69 +58,61 @@ export default async function handler(
   res.setHeader('Content-Type', 'application/json');
 
   try {
-    // Fetch holdings from Edge Config
-    const response = await fetch(`https://api.vercel.com/v1/edge-config/${EDGE_CONFIG_ID}/items`, {
-      headers: {
-        'Authorization': `Bearer ${EDGE_CONFIG_TOKEN}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch holdings from Edge Config');
-    }
-
-    const items = await response.json();
-    const holdingsItem = items.find((item: any) => item.key === 'holdings');
-
-    if (!holdingsItem) {
-      throw new Error('No holdings found in Edge Config');
-    }
-
-    const holdingsData = holdingsItem.value;
-
-    // Fetch real-time data for all tickers
-    // Collect all symbols to fetch
+    const items = await fetchEdgeConfigItems();
+    const holdingsData = readHoldingsFromItems(items);
     const uniqueSymbols = new Set<string>();
+    const normalizedTickers = Object.keys(holdingsData).map((ticker) => ticker.toUpperCase());
 
-    // We iterate holdingsData keys
-    Object.keys(holdingsData).forEach((ticker) => {
-      if (ticker.includes('.')) {
-        uniqueSymbols.add(ticker);
-      } else {
-        uniqueSymbols.add(`${ticker}.NS`);
-        uniqueSymbols.add(`${ticker}.BO`);
-      }
+    normalizedTickers.forEach((ticker) => {
+      getPreferredSymbols(ticker).forEach((symbol) => {
+        uniqueSymbols.add(symbol);
+      });
     });
 
     const symbols = Array.from(uniqueSymbols);
-    console.log(`Fetching ${symbols.length} symbols...`);
+    const primaryQuotes: QuoteLike[] = await fetchQuotes(symbols);
+    const quoteMap = new Map(primaryQuotes.map((quote: QuoteLike) => [quote.symbol.toUpperCase(), quote]));
 
-    let quotes: any[] = [];
-    try {
-      if (symbols.length > 0) {
-        // Use validateResult: false to allow partial success if possible or less strict validation
-        quotes = await yahooFinance.quote(symbols, {}, { validateResult: false });
+    const fallbackSymbols = normalizedTickers.flatMap((ticker) => {
+      if (ticker.includes('.')) {
+        return [];
       }
-    } catch (e) {
-      console.error("Batch quote fetch failed:", e);
-      quotes = [];
-    }
 
-    const quoteMap = new Map(quotes.map(q => [q.symbol.toUpperCase(), q]));
+      const preferredSuffix = preferredExchangeByTicker.get(ticker);
+      if (!preferredSuffix) {
+        return [];
+      }
+
+      const preferredSymbol = `${ticker}${preferredSuffix}`;
+      if (quoteMap.has(preferredSymbol)) {
+        return [];
+      }
+
+      const fallbackSuffix: ExchangeSuffix = preferredSuffix === '.NS' ? '.BO' : '.NS';
+      return [`${ticker}${fallbackSuffix}`];
+    });
+
+    const fallbackQuotes: QuoteLike[] = await fetchQuotes(fallbackSymbols);
+    fallbackQuotes.forEach((quote: QuoteLike) => {
+      quoteMap.set(quote.symbol.toUpperCase(), quote);
+    });
 
     const holdings = Object.entries(holdingsData).map(([ticker, data]: [string, any]): Holding => {
-      let quote;
       const tickerUpper = ticker.toUpperCase();
-      if (ticker.includes('.')) {
-        quote = quoteMap.get(tickerUpper);
-      } else {
-        // Prefer NS, then BO
-        quote = quoteMap.get(`${tickerUpper}.NS`) || quoteMap.get(`${tickerUpper}.BO`);
+      const quote = ticker.includes('.')
+        ? quoteMap.get(tickerUpper)
+        : quoteMap.get(`${tickerUpper}.NS`) || quoteMap.get(`${tickerUpper}.BO`);
+
+      if (!ticker.includes('.')) {
+        if (quoteMap.has(`${tickerUpper}.NS`)) {
+          preferredExchangeByTicker.set(tickerUpper, '.NS');
+        } else if (quoteMap.has(`${tickerUpper}.BO`)) {
+          preferredExchangeByTicker.set(tickerUpper, '.BO');
+        }
       }
 
       // If quote is still not found, return fallback data
       if (!quote) {
-        console.error(`Data for ticker ${ticker} not found on NSE or BSE (checked batch results). Using fallback data.`);
         return {
           ticker,
           name: ticker, // Fallback name

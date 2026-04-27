@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { useRouter } from 'next/router';
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
 import Link from 'next/link';
-import { Holding } from '../types/holding';
 import debounce from 'lodash.debounce';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { useHoldingsData, useIndicesData } from '../hooks/usePortfolioData';
 import PullToRefresh from '../components/PullToRefresh';
 
 // Lazy load components for better performance
@@ -12,25 +11,12 @@ const MarketIndices = lazy(() => import('../components/MarketIndices'));
 const GlobalMarkets = lazy(() => import('../components/GlobalMarkets'));
 const StockCard = lazy(() => import('../components/StockCard'));
 
-interface MarketData {
-  indices: MarketIndex[];
-}
-
-
-interface MarketIndex {
+interface SearchResult {
+  ticker: string;
   name: string;
-  value: number;
+  price: number;
   change: number;
   changePercent: number;
-}
-
-interface SearchStock {
-  symbol: string;
-  longname?: string;
-  shortname?: string;
-  regularMarketPrice: string | number;
-  regularMarketChange: string | number;
-  regularMarketChangePercent: string | number;
 }
 
 const LoadingSkeleton = () => (
@@ -103,157 +89,37 @@ const SkeletonGlobalMarkets = () => (
 );
 
 export default function Home() {
-  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [isPageLoading, setIsPageLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
-  const [marketData, setMarketData] = useState<MarketData>({
-    indices: [
-      { name: 'SENSEX', value: 0, change: 0, changePercent: 0 },
-      { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0 }
-    ]
-  });
+  const {
+    data: holdings,
+    isLoading: isHoldingsLoading,
+    refresh: refreshHoldings,
+  } = useHoldingsData();
+  const {
+    data: indices,
+    isLoading: isIndicesLoading,
+    refresh: refreshIndices,
+  } = useIndicesData();
+  const isPageLoading = isHoldingsLoading || isIndicesLoading;
 
   // Pull to refresh functionality
   const refreshData = useCallback(async () => {
     try {
-      setIsPageLoading(true);
-
-        // Fetch holdings and market data in parallel
-        const [holdingsResponse, indicesResponse] = await Promise.allSettled([
-          fetch('/api/stockData', {
-            headers: {
-              'Cache-Control': 'max-age=60',
-            },
-          }),
-          fetch('/api/indicesData', {
-            headers: {
-              'Cache-Control': 'max-age=60',
-            },
-          })
-        ]);
-
-      // Process holdings data
-      if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
-        const holdingsData = await holdingsResponse.value.json();
-        setHoldings(holdingsData);
-      }
-
-
-      // Process indices data
-      if (indicesResponse.status === 'fulfilled' && indicesResponse.value.ok) {
-        const indicesData = await indicesResponse.value.json();
-        if (indicesData && Array.isArray(indicesData) && indicesData.length >= 2) {
-          setMarketData(prev => ({
-            ...prev,
-            indices: [
-              {
-                name: 'SENSEX',
-                value: indicesData[0].value || 0,
-                change: indicesData[0].change || 0,
-                changePercent: indicesData[0].changePercent || 0
-              },
-              {
-                name: 'NIFTY 50',
-                value: indicesData[1].value || 0,
-                change: indicesData[1].change || 0,
-                changePercent: indicesData[1].changePercent || 0
-              }
-            ]
-          }));
-        }
-      }
+      await Promise.all([refreshHoldings(true), refreshIndices(true)]);
     } catch (error) {
       console.error('Error refreshing data:', error);
-    } finally {
-      setIsPageLoading(false);
     }
-  }, []);
+  }, [refreshHoldings, refreshIndices]);
 
   const { isPulling, isRefreshing, pullDistance, canRefresh } = usePullToRefresh({
     onRefresh: refreshData,
     threshold: 80,
     resistance: 0.5,
   });
-
-  useEffect(() => {
-    const fetchIndicesData = async () => {
-      try {
-        const indicesResponse = await fetch('/api/indicesData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        });
-        if (!indicesResponse.ok) {
-          throw new Error(`Failed to fetch indices: ${indicesResponse.status}`);
-        }
-        
-        const indicesData = await indicesResponse.json();
-        if (!indicesData || !Array.isArray(indicesData) || indicesData.length < 2) {
-          throw new Error('Invalid indices data format');
-        }
-
-        setMarketData(prev => ({
-          ...prev,
-          indices: [
-            {
-              name: 'SENSEX',
-              value: indicesData[0].value || 0,
-              change: indicesData[0].change || 0,
-              changePercent: indicesData[0].changePercent || 0
-            },
-            {
-              name: 'NIFTY 50',
-              value: indicesData[1].value || 0,
-              change: indicesData[1].change || 0,
-              changePercent: indicesData[1].changePercent || 0
-            }
-          ]
-        }));
-      } catch (error) {
-        console.error('Error fetching indices:', error);
-      }
-    };
-
-    // Fetch immediately
-    fetchIndicesData();
-    
-    // Set up interval for updates
-    const indicesInterval = setInterval(fetchIndicesData, 300000); // 5 minutes
-    return () => clearInterval(indicesInterval);
-  }, []);
-
-  useEffect(() => {
-    const fetchHoldingsData = async () => {
-      try {
-        setIsPageLoading(true);
-
-        // Fetch holdings data
-        const holdingsResponse = await fetch('/api/stockData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        });
-
-        // Process holdings data
-        if (holdingsResponse.ok) {
-          const holdingsData = await holdingsResponse.json();
-          setHoldings(holdingsData);
-        }
-      } catch (error) {
-        console.error('Error fetching holdings data:', error);
-      } finally {
-        setIsPageLoading(false);
-      }
-    };
-
-    fetchHoldingsData();
-    const holdingsInterval = setInterval(fetchHoldingsData, 300000);
-    return () => clearInterval(holdingsInterval);
-  }, []);
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
@@ -265,10 +131,9 @@ export default function Home() {
       setIsSearching(true);
       const response = await fetch(`/api/searchStocks?query=${encodeURIComponent(query.trim())}`);
       const data = await response.json();
-      console.log('Frontend received data:', data);
 
       if (Array.isArray(data)) {
-        const mappedResults = data.map(stock => ({
+        const mappedResults: SearchResult[] = data.map(stock => ({
           ticker: stock.symbol,
           name: stock.longname || stock.shortname || stock.symbol,
           price: stock.regularMarketPrice || 0,
@@ -276,7 +141,6 @@ export default function Home() {
           changePercent: stock.regularMarketChangePercent || 0
         }));
 
-        console.log('Mapped results:', mappedResults);
         setSearchResults(mappedResults);
       } else {
         console.error('Invalid response format:', data);
@@ -291,10 +155,18 @@ export default function Home() {
   };
 
   // Debounce search to avoid too many API calls
-  const debouncedSearch = useCallback(
-    debounce((query: string) => handleSearch(query), 300),
+  const debouncedSearch = useMemo(
+    () => debounce((query: string) => {
+      void handleSearch(query);
+    }, 300),
     []
   );
+
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
 
   const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
@@ -318,14 +190,14 @@ export default function Home() {
   };
 
   return isPageLoading ? <LoadingSkeleton /> : (
-    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6 safe-area-inset-top pb-safe">
+    <div className="min-h-screen bg-[#0A0A0A] text-white/90 pt-4 pb-6 safe-area-inset-top pb-safe">
       <PullToRefresh
         isPulling={isPulling}
         isRefreshing={isRefreshing}
         pullDistance={pullDistance}
         canRefresh={canRefresh}
       />
-      <div className="max-w-5xl mx-auto px-4 space-y-6 pt-safe">
+      <div className="max-w-5xl mx-auto px-4 space-y-6">
         {/* Search Section */}
         <div className="flex items-center justify-between mb-6">
           <div className={`flex items-center gap-4 ${showSearch ? 'w-full' : ''}`}>
@@ -463,7 +335,7 @@ export default function Home() {
           }}
         >
           <Suspense fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
-            <MarketIndices indices={marketData.indices} error={false} />
+            <MarketIndices indices={indices} error={false} />
           </Suspense>
           <div className="mt-6">
             <Suspense fallback={<div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />}>

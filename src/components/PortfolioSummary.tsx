@@ -19,13 +19,13 @@ const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({ holdings }) => {
   const totalInvested = holdings.reduce((sum, stock) => sum + stock.averageBuyPrice * stock.quantity, 0);
   const currentValue = holdings.reduce((sum, stock) => sum + stock.lastTradedPrice * stock.quantity, 0);
   const overallPL = currentValue - totalInvested;
-  const overallPLPercentage = (overallPL / totalInvested) * 100;
+  const overallPLPercentage = totalInvested > 0 ? (overallPL / totalInvested) * 100 : 0;
 
   const dailyPL = holdings.reduce((sum, stock) => {
     const stockValue = stock.lastTradedPrice * stock.quantity;
     return sum + (stockValue * stock.dailyChangePercentage / 100);
   }, 0);
-  const dailyPLPercentage = (dailyPL / currentValue) * 100;
+  const dailyPLPercentage = currentValue > 0 ? (dailyPL / currentValue) * 100 : 0;
 
   return (
     <div className="backdrop-blur-md bg-white/[0.03] rounded-lg border border-white/[0.06] p-4 sm:p-5">
@@ -44,7 +44,7 @@ const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({ holdings }) => {
         <div className="col-span-1 sm:col-span-2">
           <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <div className="text-xs font-medium text-white/60">Day's P&L</div>
+              <div className="text-xs font-medium text-white/60">Day&apos;s P&amp;L</div>
               <div className="flex items-baseline gap-2">
                 <div className={`text-xs sm:text-lg font-semibold ${dailyPL >= 0 ? 'text-green-400/90' : 'text-red-400/90'}`}>
                   {dailyPL >= 0 ? '+' : '-'}₹{formatNumber(dailyPL)}

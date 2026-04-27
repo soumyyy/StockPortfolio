@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
+import { useState, useRef, Suspense, lazy, useCallback } from 'react';
 import { Holding } from '../types/holding';
 import Link from 'next/link';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { useHoldingsData, useIndicesData } from '../hooks/usePortfolioData';
 import PullToRefresh from '../components/PullToRefresh';
 import EditHoldingModal from '../components/EditHoldingModal';
 
@@ -15,15 +16,6 @@ type SortOption = 'unrealizedPL' | 'dailyChangePercentage' | 'alphabetical';
 interface SortConfig {
   key: SortOption;
   direction: 'asc' | 'desc';
-}
-
-interface MarketIndex {
-  name: string;
-  value: number;
-  change: number;
-  changePercent: number;
-  isStale?: boolean;
-  lastUpdate?: string;
 }
 
 function LoadingSkeleton() {
@@ -99,17 +91,26 @@ const formatNumber = (num: number) => {
 };
 
 export default function Holdings() {
-  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'alphabetical', direction: 'asc' });
-  const [indices, setIndices] = useState<MarketIndex[]>([
-    { name: 'SENSEX', value: 0, change: 0, changePercent: 0, isStale: true },
-    { name: 'NIFTY 50', value: 0, change: 0, changePercent: 0, isStale: true }
-  ]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [indicesError, setIndicesError] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const {
+    data: holdings,
+    isLoading: isHoldingsLoading,
+    refresh: refreshHoldings,
+  } = useHoldingsData();
+  const {
+    data: rawIndices,
+    error: indicesError,
+    isLoading: isIndicesLoading,
+    refresh: refreshIndices,
+  } = useIndicesData();
+  const isLoading = isHoldingsLoading || isIndicesLoading;
+  const indices = rawIndices.map((index) => ({
+    ...index,
+    isStale: Boolean(indicesError),
+  }));
   
   // Edit modal state
   const [editModal, setEditModal] = useState<{
@@ -125,59 +126,11 @@ export default function Holdings() {
   // Pull to refresh functionality
   const refreshData = useCallback(async () => {
     try {
-      setIsLoading(true);
-
-      // Fetch both indices and holdings data in parallel
-      const [indicesResponse, holdingsResponse] = await Promise.allSettled([
-        fetch('/api/indicesData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        }),
-        fetch('/api/stockData', {
-          headers: {
-            'Cache-Control': 'max-age=60',
-          },
-        })
-      ]);
-
-      // Process indices data
-      if (indicesResponse.status === 'fulfilled' && indicesResponse.value.ok) {
-        const indicesData = await indicesResponse.value.json();
-        if (indicesData && Array.isArray(indicesData) && indicesData.length >= 2) {
-          setIndices([
-            {
-              name: 'SENSEX',
-              value: indicesData[0].value || 0,
-              change: indicesData[0].change || 0,
-              changePercent: indicesData[0].changePercent || 0,
-              lastUpdate: new Date().toISOString(),
-              isStale: false
-            },
-            {
-              name: 'NIFTY 50',
-              value: indicesData[1].value || 0,
-              change: indicesData[1].change || 0,
-              changePercent: indicesData[1].changePercent || 0,
-              lastUpdate: new Date().toISOString(),
-              isStale: false
-            }
-          ]);
-          setIndicesError(false);
-        }
-      }
-
-      // Process holdings data
-      if (holdingsResponse.status === 'fulfilled' && holdingsResponse.value.ok) {
-        const holdingsData = await holdingsResponse.value.json();
-        setHoldings(holdingsData);
-      }
+      await Promise.all([refreshIndices(true), refreshHoldings(true)]);
     } catch (error) {
       console.error('Error refreshing data:', error);
-    } finally {
-      setIsLoading(false);
     }
-  }, []);
+  }, [refreshHoldings, refreshIndices]);
 
   const { isPulling, isRefreshing, pullDistance, canRefresh } = usePullToRefresh({
     onRefresh: refreshData,
@@ -219,7 +172,7 @@ export default function Holdings() {
 
       if (response.ok) {
         // Refresh data
-        await refreshData();
+        await refreshHoldings(true);
       } else {
         const error = await response.json();
         throw new Error(error.error);
@@ -268,7 +221,7 @@ export default function Holdings() {
 
       if (response.ok) {
         // Refresh data
-        await refreshData();
+        await refreshHoldings(true);
         return;
       } else {
         const error = await response.json();
@@ -303,89 +256,15 @@ export default function Holdings() {
     holding.ticker.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  useEffect(() => {
-    const fetchIndicesData = async () => {
-      try {
-        const indicesResponse = await fetch('/api/indicesData');
-        if (!indicesResponse.ok) {
-          throw new Error(`Failed to fetch indices: ${indicesResponse.status}`);
-        }
-        
-        const indicesData = await indicesResponse.json();
-        if (!indicesData || !Array.isArray(indicesData) || indicesData.length < 2) {
-          throw new Error('Invalid indices data format');
-        }
-
-        setIndices([
-          {
-            name: 'SENSEX',
-            value: indicesData[0].value || 0,
-            change: indicesData[0].change || 0,
-            changePercent: indicesData[0].changePercent || 0,
-            lastUpdate: new Date().toISOString(),
-            isStale: false
-          },
-          {
-            name: 'NIFTY 50',
-            value: indicesData[1].value || 0,
-            change: indicesData[1].change || 0,
-            changePercent: indicesData[1].changePercent || 0,
-            lastUpdate: new Date().toISOString(),
-            isStale: false
-          }
-        ]);
-        setIndicesError(false);
-      } catch (error) {
-        console.error('Error fetching indices data:', error);
-        setIndicesError(true);
-        setIndices(prev => prev.map(index => ({
-          ...index,
-          isStale: true,
-          lastUpdate: new Date().toISOString()
-        })));
-      }
-    };
-
-    const fetchHoldingsData = async () => {
-      try {
-        const holdingsResponse = await fetch('/api/stockData');
-        const holdingsData = await holdingsResponse.json();
-        setHoldings(holdingsData);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching holdings data:', error);
-        setIsLoading(false);
-      }
-    };
-
-    // Initial fetch
-    fetchIndicesData();
-    fetchHoldingsData();
-
-    // Set up intervals
-    const indicesInterval = setInterval(fetchIndicesData, 60000); // Update indices every minute
-    const holdingsInterval = setInterval(fetchHoldingsData, 300000); // Update holdings every 5 minutes
-
-    return () => {
-      clearInterval(indicesInterval);
-      clearInterval(holdingsInterval);
-    };
-  }, []);
-
-  const gainers = holdings.filter(stock => stock.unrealizedPLPercentage > 0).length;
-  const losers = holdings.filter(stock => stock.unrealizedPLPercentage < 0).length;
-  const topGainer = [...holdings].sort((a, b) => b.unrealizedPLPercentage - a.unrealizedPLPercentage)[0];
-  const topLoser = [...holdings].sort((a, b) => a.unrealizedPLPercentage - b.unrealizedPLPercentage)[0];
-
   return isLoading ? <LoadingSkeleton /> : (
-    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6 safe-area-inset-top pb-safe">
+    <div className="min-h-screen bg-[#0A0A0A] text-white/90 pt-4 pb-6 safe-area-inset-top pb-safe">
       <PullToRefresh
         isPulling={isPulling}
         isRefreshing={isRefreshing}
         pullDistance={pullDistance}
         canRefresh={canRefresh}
       />
-      <div className="max-w-5xl mx-auto px-4 space-y-6 pt-safe">
+      <div className="max-w-5xl mx-auto px-4 space-y-6">
         <div className="mb-4">
           <Link href="/" className="inline-flex items-center text-sm text-white/70 hover:text-white/90 transition-colors">
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -395,7 +274,7 @@ export default function Holdings() {
           </Link>
         </div>
         <Suspense fallback={<div className="h-20 bg-white/[0.03] rounded-lg animate-pulse" />}>
-          <MarketIndices indices={indices} error={indicesError} />
+          <MarketIndices indices={indices} error={Boolean(indicesError)} />
         </Suspense>
         <Suspense fallback={<div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />}>
           <PortfolioSummary holdings={holdings} />

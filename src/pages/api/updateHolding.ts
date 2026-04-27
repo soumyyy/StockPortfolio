@@ -1,12 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-
-// Initialize Edge Config
-const EDGE_CONFIG_ID = process.env.EDGE_CONFIG_ID;
-const EDGE_CONFIG_TOKEN = process.env.VERCEL_ACCESS_TOKEN;
-
-if (!EDGE_CONFIG_ID || !EDGE_CONFIG_TOKEN) {
-  throw new Error('Edge Config environment variables are not set');
-}
+import {
+  fetchEdgeConfigItems,
+  readHoldingsFromItems,
+  writeHoldingToEdgeConfig,
+} from '../../lib/edgeConfigHoldings';
 
 export default async function handler(
   req: NextApiRequest,
@@ -37,26 +34,10 @@ export default async function handler(
       }
     }
 
-    // Fetch current holdings from Edge Config
-    const response = await fetch(`https://api.vercel.com/v1/edge-config/${EDGE_CONFIG_ID}/items`, {
-      headers: {
-        'Authorization': `Bearer ${EDGE_CONFIG_TOKEN}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch holdings from Edge Config');
-    }
-
-    const items = await response.json();
-    const holdingsItem = items.find((item: any) => item.key === 'holdings');
-    
-    if (!holdingsItem) {
-      throw new Error('No holdings found in Edge Config');
-    }
-
-    const holdingsData = holdingsItem.value || {};
+    const items = await fetchEdgeConfigItems();
+    const holdingsData = readHoldingsFromItems(items);
     const existingHolding = holdingsData[normalizedTicker];
+    let nextHolding = null;
 
     if (action === 'add') {
       if (existingHolding) {
@@ -66,51 +47,28 @@ export default async function handler(
         const totalValue = (existingQuantity * existingAverage) + (parsedQuantity * parsedAveragePrice);
         const newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
 
-        holdingsData[normalizedTicker] = {
+        nextHolding = {
           averagePrice: Number(newAverage.toFixed(2)),
           quantity: totalQuantity
         };
       } else {
-        holdingsData[normalizedTicker] = {
+        nextHolding = {
           averagePrice: parsedAveragePrice,
           quantity: parsedQuantity
         };
       }
     } else if (action === 'update') {
-      holdingsData[normalizedTicker] = {
+      nextHolding = {
         averagePrice: parsedAveragePrice,
         quantity: parsedQuantity
       };
     } else if (action === 'delete') {
-      // Delete holding
-      delete holdingsData[normalizedTicker];
+      nextHolding = null;
     } else {
       return res.status(400).json({ error: 'Invalid action' });
     }
 
-    // Update holdings in Edge Config
-    const updateResponse = await fetch(`https://api.vercel.com/v1/edge-config/${EDGE_CONFIG_ID}/items`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${EDGE_CONFIG_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        items: [
-          {
-            key: 'holdings',
-            value: holdingsData,
-            operation: 'upsert'
-          }
-        ]
-      }),
-    });
-
-    if (!updateResponse.ok) {
-      const errorData = await updateResponse.json().catch(() => null);
-      const errorMessage = errorData?.error?.message || await updateResponse.text();
-      throw new Error(`Failed to update holdings: ${errorMessage}`);
-    }
+    await writeHoldingToEdgeConfig(normalizedTicker, nextHolding);
 
     res.status(200).json({ 
       success: true, 

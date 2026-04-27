@@ -29,7 +29,7 @@ const AddStock: NextPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white/90 py-6 safe-area-inset-top pb-safe">
+    <div className="min-h-screen bg-[#0A0A0A] text-white/90 pt-4 pb-6 safe-area-inset-top pb-safe">
       <div className="max-w-5xl mx-auto px-4">
         <h1 className="text-2xl font-bold mb-4 text-white/90">Add/Remove Stock</h1>
         <form onSubmit={handleSubmit} className="mb-6 space-y-4">
