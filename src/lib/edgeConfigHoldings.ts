@@ -8,7 +8,8 @@ export interface StoredHolding {
   quantity: number;
 }
 
-const HOLDING_KEY_PREFIX = 'holding:';
+const HOLDING_KEY_PREFIX = 'holding_';
+const LEGACY_HOLDING_KEY_PREFIX = 'holding:';
 const LEGACY_HOLDINGS_KEY = 'holdings';
 
 function getEdgeConfigEnv() {
@@ -37,6 +38,18 @@ function getEdgeConfigHeaders() {
 
 function normalizeTicker(ticker: string) {
   return ticker.trim().toUpperCase();
+}
+
+function encodeTickerKey(ticker: string) {
+  return Buffer.from(normalizeTicker(ticker), 'utf8').toString('base64url');
+}
+
+function decodeTickerKey(encodedTicker: string) {
+  try {
+    return normalizeTicker(Buffer.from(encodedTicker, 'base64url').toString('utf8'));
+  } catch {
+    return '';
+  }
 }
 
 function toStoredHolding(value: unknown): StoredHolding | null {
@@ -99,11 +112,18 @@ export function readHoldingsFromItems(items: EdgeConfigItem[]) {
   const holdings = extractLegacyHoldings(items);
 
   for (const item of items) {
-    if (!item.key.startsWith(HOLDING_KEY_PREFIX)) {
+    let ticker = '';
+
+    if (item.key.startsWith(HOLDING_KEY_PREFIX)) {
+      ticker = decodeTickerKey(item.key.slice(HOLDING_KEY_PREFIX.length));
+    } else if (item.key.startsWith(LEGACY_HOLDING_KEY_PREFIX)) {
+      ticker = normalizeTicker(item.key.slice(LEGACY_HOLDING_KEY_PREFIX.length));
+    }
+
+    if (!ticker) {
       continue;
     }
 
-    const ticker = normalizeTicker(item.key.slice(HOLDING_KEY_PREFIX.length));
     const parsed = toStoredHolding(item.value);
 
     if (parsed) {
@@ -119,13 +139,14 @@ export function readHoldingsFromItems(items: EdgeConfigItem[]) {
 
 export async function writeHoldingToEdgeConfig(ticker: string, holding: StoredHolding | null) {
   const normalizedTicker = normalizeTicker(ticker);
+  const holdingKey = `${HOLDING_KEY_PREFIX}${encodeTickerKey(normalizedTicker)}`;
   const response = await fetch(getEdgeConfigItemsUrl(), {
     method: 'PATCH',
     headers: getEdgeConfigHeaders(),
     body: JSON.stringify({
       items: [
         {
-          key: `${HOLDING_KEY_PREFIX}${normalizedTicker}`,
+          key: holdingKey,
           value: holding,
           operation: 'upsert',
         },

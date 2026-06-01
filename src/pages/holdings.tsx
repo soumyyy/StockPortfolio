@@ -171,29 +171,12 @@ export default function Holdings() {
   const handleSaveHolding = async (data: { ticker: string; quantity: number; averagePrice: number }) => {
     try {
       const normalizedTicker = data.ticker.trim().toUpperCase();
-      const existingHolding = holdings.find(
-        (holding) => holding.ticker.toUpperCase() === normalizedTicker
-      );
-
-      let payload = {
+      const payload = {
         ticker: normalizedTicker,
         quantity: data.quantity,
         averagePrice: data.averagePrice,
         action: editModal.isNew ? 'add' : 'update' as 'add' | 'update',
       };
-
-      if (editModal.isNew && existingHolding) {
-        const totalQuantity = existingHolding.quantity + data.quantity;
-        const totalValue = (existingHolding.quantity * existingHolding.averageBuyPrice) + (data.quantity * data.averagePrice);
-        const newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
-
-        payload = {
-          ticker: normalizedTicker,
-          quantity: totalQuantity,
-          averagePrice: Number(newAverage.toFixed(2)),
-          action: 'update',
-        };
-      }
 
       const response = await fetch('/api/updateHolding', {
         method: 'POST',
@@ -270,6 +253,7 @@ export default function Holdings() {
           <div className={`flex items-center gap-4 ${showSearch ? 'w-full sm:w-auto' : ''}`}>
             <h2 className={`text-xs font-medium text-white/60 ${showSearch ? 'hidden sm:block' : 'block'}`}>Holdings</h2>
             <button
+              type="button"
               onClick={handleAddHolding}
               className="px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.06] rounded-lg text-xs text-white/70 transition-colors"
             >

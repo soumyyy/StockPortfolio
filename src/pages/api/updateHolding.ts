@@ -24,14 +24,8 @@ export default async function handler(
     const parsedQuantity = Number(quantity);
     const parsedAveragePrice = Number(averagePrice);
 
-    if (action !== 'delete') {
-      if (!parsedQuantity || !parsedAveragePrice) {
-        return res.status(400).json({ error: 'Quantity and average price must be provided for add/update' });
-      }
-
-      if (parsedQuantity <= 0 || parsedAveragePrice <= 0) {
-        return res.status(400).json({ error: 'Quantity and average price must be positive' });
-      }
+    if (action !== 'delete' && (!Number.isFinite(parsedQuantity) || parsedQuantity === 0)) {
+      return res.status(400).json({ error: 'Quantity must be a non-zero number' });
     }
 
     const items = await fetchEdgeConfigItems();
@@ -44,22 +38,52 @@ export default async function handler(
         const existingQuantity = Number(existingHolding.quantity) || 0;
         const existingAverage = Number(existingHolding.averagePrice) || 0;
         const totalQuantity = existingQuantity + parsedQuantity;
-        const totalValue = (existingQuantity * existingAverage) + (parsedQuantity * parsedAveragePrice);
-        const newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
+
+        if (totalQuantity < 0) {
+          return res.status(400).json({ error: 'Quantity cannot go below zero' });
+        }
+
+        if (totalQuantity === 0) {
+          nextHolding = null;
+        } else if (parsedQuantity > 0) {
+          if (!Number.isFinite(parsedAveragePrice) || parsedAveragePrice <= 0) {
+            return res.status(400).json({ error: 'Average price must be positive for a buy lot' });
+          }
+
+          const totalValue = (existingQuantity * existingAverage) + (parsedQuantity * parsedAveragePrice);
+          const newAverage = totalValue / totalQuantity;
+
+          nextHolding = {
+            averagePrice: Number(newAverage.toFixed(2)),
+            quantity: totalQuantity
+          };
+        } else {
+          nextHolding = {
+            averagePrice: existingAverage,
+            quantity: totalQuantity
+          };
+        }
+      } else {
+        if (parsedQuantity <= 0) {
+          return res.status(400).json({ error: 'Cannot sell a stock that is not in holdings' });
+        }
+
+        if (!Number.isFinite(parsedAveragePrice) || parsedAveragePrice <= 0) {
+          return res.status(400).json({ error: 'Average price must be positive for a new holding' });
+        }
 
         nextHolding = {
-          averagePrice: Number(newAverage.toFixed(2)),
-          quantity: totalQuantity
-        };
-      } else {
-        nextHolding = {
-          averagePrice: parsedAveragePrice,
+          averagePrice: Number(parsedAveragePrice.toFixed(2)),
           quantity: parsedQuantity
         };
       }
     } else if (action === 'update') {
+      if (!Number.isFinite(parsedAveragePrice) || parsedQuantity <= 0 || parsedAveragePrice <= 0) {
+        return res.status(400).json({ error: 'Quantity and average price must be positive for update' });
+      }
+
       nextHolding = {
-        averagePrice: parsedAveragePrice,
+        averagePrice: Number(parsedAveragePrice.toFixed(2)),
         quantity: parsedQuantity
       };
     } else if (action === 'delete') {

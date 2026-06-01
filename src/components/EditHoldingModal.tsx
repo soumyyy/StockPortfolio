@@ -30,6 +30,7 @@ export default function EditHoldingModal({
     price: ''
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     if (holding && !isNew) {
@@ -47,20 +48,30 @@ export default function EditHoldingModal({
     }
     setAdditionalLot({ quantity: '', price: '' });
     setShowDeleteConfirm(false);
+    setFormError('');
   }, [holding, isNew]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.ticker.trim() || formData.quantity <= 0 || formData.averagePrice <= 0) {
+    const requiresAveragePrice = !isNew || formData.quantity > 0;
+
+    if (!formData.ticker.trim() || formData.quantity === 0 || (!isNew && formData.quantity < 0) || (requiresAveragePrice && formData.averagePrice <= 0)) {
+      setFormError(
+        isNew
+          ? 'Enter a ticker and non-zero quantity. Average price is required for buy lots.'
+          : 'Enter a ticker, positive quantity, and positive average price.'
+      );
       return;
     }
 
     setIsLoading(true);
+    setFormError('');
     try {
       await onSave(formData);
       onClose();
     } catch (error) {
       console.error('Error saving holding:', error);
+      setFormError(error instanceof Error ? error.message : 'Failed to save holding');
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +81,7 @@ export default function EditHoldingModal({
     if (!isLoading && !isDeleting) {
       setAdditionalLot({ quantity: '', price: '' });
       setShowDeleteConfirm(false);
+      setFormError('');
       onClose();
     }
   };
@@ -79,12 +91,14 @@ export default function EditHoldingModal({
       return;
     }
     setIsDeleting(true);
+    setFormError('');
     try {
       await onDelete(formData.ticker);
       setShowDeleteConfirm(false);
       onClose();
     } catch (error) {
       console.error('Error deleting holding:', error);
+      setFormError(error instanceof Error ? error.message : 'Failed to delete holding');
     } finally {
       setIsDeleting(false);
     }
@@ -94,6 +108,7 @@ export default function EditHoldingModal({
     const addQuantity = Number(additionalLot.quantity);
     const addPrice = Number(additionalLot.price);
     if (!addQuantity || Number.isNaN(addQuantity)) {
+      setFormError('Enter a buy or sell quantity to apply.');
       return;
     }
 
@@ -108,6 +123,7 @@ export default function EditHoldingModal({
 
     if (addQuantity > 0) {
       if (!addPrice || addPrice <= 0) {
+        setFormError('Enter a positive price for a purchase lot.');
         return;
       }
       const totalValue = currentQuantity * currentAverage + addQuantity * addPrice;
@@ -122,6 +138,7 @@ export default function EditHoldingModal({
       averagePrice: Number(newAverage.toFixed(2))
     }));
     setAdditionalLot({ quantity: '', price: '' });
+    setFormError('');
   };
 
   const additionalQuantityValue = Number(additionalLot.quantity);
@@ -184,7 +201,10 @@ export default function EditHoldingModal({
                 <input
                   type="text"
                   value={formData.ticker}
-                  onChange={(e) => setFormData(prev => ({ ...prev, ticker: e.target.value.toUpperCase() }))}
+                  onChange={(e) => {
+                    setFormError('');
+                    setFormData(prev => ({ ...prev, ticker: e.target.value.toUpperCase() }));
+                  }}
                   placeholder="e.g., RELIANCE"
                   className="w-full bg-white/[0.02] border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-white/20"
                   disabled={isLoading}
@@ -196,9 +216,12 @@ export default function EditHoldingModal({
                 <input
                   type="number"
                   value={formData.quantity || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, quantity: Number(e.target.value) || 0 }))}
+                  onChange={(e) => {
+                    setFormError('');
+                    setFormData(prev => ({ ...prev, quantity: Number(e.target.value) || 0 }));
+                  }}
                   placeholder="0"
-                  min="0"
+                  min={isNew ? undefined : '0'}
                   step="1"
                   className="w-full bg-white/[0.02] border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-white/20"
                   disabled={isLoading}
@@ -210,13 +233,16 @@ export default function EditHoldingModal({
                 <input
                   type="number"
                   value={formData.averagePrice || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, averagePrice: Number(e.target.value) || 0 }))}
+                  onChange={(e) => {
+                    setFormError('');
+                    setFormData(prev => ({ ...prev, averagePrice: Number(e.target.value) || 0 }));
+                  }}
                   placeholder="0.00"
                   min="0"
                   step="0.01"
                   className="w-full bg-white/[0.02] border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-white/20"
                   disabled={isLoading}
-                  required
+                  required={!isNew || formData.quantity > 0}
                 />
               </div>
             </div>
@@ -234,7 +260,10 @@ export default function EditHoldingModal({
                   <input
                     type="number"
                     value={additionalLot.quantity}
-                    onChange={(e) => setAdditionalLot(prev => ({ ...prev, quantity: e.target.value }))}
+                    onChange={(e) => {
+                      setFormError('');
+                      setAdditionalLot(prev => ({ ...prev, quantity: e.target.value }));
+                    }}
                     step="1"
                     placeholder="0"
                     className="w-full bg-white/[0.02] border border-white/[0.06] rounded-lg px-3 py-2 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-white/20"
@@ -246,7 +275,10 @@ export default function EditHoldingModal({
                   <input
                     type="number"
                     value={additionalLot.price}
-                    onChange={(e) => setAdditionalLot(prev => ({ ...prev, price: e.target.value }))}
+                    onChange={(e) => {
+                      setFormError('');
+                      setAdditionalLot(prev => ({ ...prev, price: e.target.value }));
+                    }}
                     min="0"
                     step="0.01"
                     placeholder="0.00"
@@ -302,6 +334,12 @@ export default function EditHoldingModal({
             </div>
           )}
 
+          {formError && (
+            <div className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">
+              {formError}
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3 pt-4">
             <button
@@ -314,7 +352,14 @@ export default function EditHoldingModal({
             </button>
             <button
               type="submit"
-              disabled={isLoading || isDeleting || !formData.ticker.trim() || formData.quantity <= 0 || formData.averagePrice <= 0}
+              disabled={
+                isLoading ||
+                isDeleting ||
+                !formData.ticker.trim() ||
+                formData.quantity === 0 ||
+                (!isNew && formData.quantity < 0) ||
+                ((!isNew || formData.quantity > 0) && formData.averagePrice <= 0)
+              }
               className="flex-1 px-4 py-2 bg-white/[0.1] hover:bg-white/[0.15] border border-white/[0.06] rounded-lg text-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
