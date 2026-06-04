@@ -21,6 +21,16 @@ A minimalistic, real-time stock portfolio tracker built with Next.js and inspire
 - TailwindCSS
 - Yahoo Finance API
 
+## External Portfolio API
+
+Call the public read-only portfolio endpoint:
+
+```bash
+curl https://soumya-stock-portfolio.vercel.app/api/external/portfolio
+```
+
+The endpoint returns JSON with `summary`, `holdings`, `generatedAt`, and `currency` fields for LLMs or external automations.
+
 ## Screenshots
 
 [Coming Soon]
