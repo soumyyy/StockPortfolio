@@ -1,6 +1,6 @@
 // Script to resize portfolio icon to all required PWA sizes
 import sharp from 'sharp';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const iconsDir = join(process.cwd(), 'public', 'icons');
@@ -41,6 +41,30 @@ console.log('📝 Note: Images will be resized to fit within bounds without crop
 console.log('🎯 Black background will be added to maintain square aspect ratio');
 console.log('');
 
+async function createPaddedIcon(size, outputPath, scale = 1) {
+  const innerSize = Math.max(1, Math.round(size * scale));
+  const resizedSource = await sharp(inputImage)
+    .resize(innerSize, innerSize, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      position: 'center'
+    })
+    .png()
+    .toBuffer();
+
+  await sharp({
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background: { r: 10, g: 10, b: 10, alpha: 1 }
+    }
+  })
+    .composite([{ input: resizedSource, gravity: 'center' }])
+    .png()
+    .toFile(outputPath);
+}
+
 async function resizeIcons() {
   try {
     // Get image metadata
@@ -68,14 +92,7 @@ async function resizeIcons() {
     console.log('🔄 Resizing favicons...');
     for (const { size, name } of faviconSizes) {
       const outputPath = join(iconsDir, name);
-      await sharp(inputImage)
-        .resize(size, size, {
-          fit: 'contain', // This ensures no cropping - image fits within bounds
-          background: { r: 10, g: 10, b: 10, alpha: 1 }, // Black background for padding
-          position: 'center' // Center the image within the square
-        })
-        .png()
-        .toFile(outputPath);
+      await createPaddedIcon(size, outputPath);
       console.log(`✅ Created ${name} (${size}x${size})`);
     }
 

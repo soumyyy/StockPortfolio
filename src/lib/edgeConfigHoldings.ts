@@ -37,11 +37,7 @@ function getEdgeConfigHeaders() {
 }
 
 function normalizeTicker(ticker: string) {
-  return ticker.trim().toUpperCase();
-}
-
-function encodeTickerKey(ticker: string) {
-  return Buffer.from(normalizeTicker(ticker), 'utf8').toString('base64url');
+  return ticker.trim().toUpperCase().replace(/\.BS$/, '.BO');
 }
 
 function decodeTickerKey(encodedTicker: string) {
@@ -50,6 +46,12 @@ function decodeTickerKey(encodedTicker: string) {
   } catch {
     return '';
   }
+}
+
+function getRedundantHoldingKeys(items: EdgeConfigItem[]) {
+  return items
+    .filter((item) => item.key.startsWith(HOLDING_KEY_PREFIX) || item.key.startsWith(LEGACY_HOLDING_KEY_PREFIX))
+    .map((item) => item.key);
 }
 
 function toStoredHolding(value: unknown): StoredHolding | null {
@@ -137,20 +139,35 @@ export function readHoldingsFromItems(items: EdgeConfigItem[]) {
   return holdings;
 }
 
-export async function writeHoldingToEdgeConfig(ticker: string, holding: StoredHolding | null) {
-  const normalizedTicker = normalizeTicker(ticker);
-  const holdingKey = `${HOLDING_KEY_PREFIX}${encodeTickerKey(normalizedTicker)}`;
+export async function writeHoldingsToEdgeConfig(
+  holdings: Record<string, StoredHolding>,
+  items: EdgeConfigItem[] = []
+) {
+  const normalizedHoldings = Object.entries(holdings).reduce<Record<string, StoredHolding>>((acc, [ticker, holding]) => {
+    const parsed = toStoredHolding(holding);
+    if (parsed) {
+      acc[normalizeTicker(ticker)] = parsed;
+    }
+    return acc;
+  }, {});
+
+  const patchItems = [
+    {
+      key: LEGACY_HOLDINGS_KEY,
+      value: normalizedHoldings,
+      operation: 'upsert',
+    },
+    ...getRedundantHoldingKeys(items).map((key) => ({
+      key,
+      operation: 'delete',
+    })),
+  ];
+
   const response = await fetch(getEdgeConfigItemsUrl(), {
     method: 'PATCH',
     headers: getEdgeConfigHeaders(),
     body: JSON.stringify({
-      items: [
-        {
-          key: holdingKey,
-          value: holding,
-          operation: 'upsert',
-        },
-      ],
+      items: patchItems,
     }),
   });
 
@@ -159,4 +176,18 @@ export async function writeHoldingToEdgeConfig(ticker: string, holding: StoredHo
     const errorMessage = errorData?.error?.message || await response.text();
     throw new Error(`Failed to update holdings: ${errorMessage}`);
   }
+}
+
+export async function writeHoldingToEdgeConfig(ticker: string, holding: StoredHolding | null) {
+  const items = await fetchEdgeConfigItems();
+  const holdings = readHoldingsFromItems(items);
+  const normalizedTicker = normalizeTicker(ticker);
+
+  if (holding) {
+    holdings[normalizedTicker] = holding;
+  } else {
+    delete holdings[normalizedTicker];
+  }
+
+  await writeHoldingsToEdgeConfig(holdings, items);
 }

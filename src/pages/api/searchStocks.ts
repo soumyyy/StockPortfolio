@@ -89,6 +89,16 @@ function getCachedSearchResults(query: string) {
   return cached.data;
 }
 
+function hasUsablePrice(quote?: QuoteLike) {
+  const price = Number(quote?.regularMarketPrice);
+  return Number.isFinite(price) && price > 0;
+}
+
+function getBestQuote(symbols: string[], quoteMap: Map<string, QuoteLike>) {
+  const quotes = symbols.map((symbol) => quoteMap.get(symbol.toUpperCase())).filter(Boolean) as QuoteLike[];
+  return quotes.find(hasUsablePrice) || quotes[0];
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { query } = req.query;
 
@@ -198,14 +208,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const stocks: StockData[] = filteredStocks.map((stock) => {
       // We need to resolve which symbol we used to fetch the quote
       const stockSymbolUpper = stock.symbol.toUpperCase();
-      const quoteData = stockSymbolUpper.endsWith('.NS') || stockSymbolUpper.endsWith('.BO')
-        ? quoteMap.get(stockSymbolUpper)
-        : quoteMap.get(`${stockSymbolUpper}.NS`) || quoteMap.get(`${stockSymbolUpper}.BO`);
+      const candidateSymbols = stockSymbolUpper.endsWith('.NS') || stockSymbolUpper.endsWith('.BO')
+        ? [stockSymbolUpper]
+        : [`${stockSymbolUpper}.NS`, `${stockSymbolUpper}.BO`];
+      const quoteData = getBestQuote(candidateSymbols, quoteMap);
 
       if (!stockSymbolUpper.endsWith('.NS') && !stockSymbolUpper.endsWith('.BO')) {
-        if (quoteMap.has(`${stockSymbolUpper}.NS`)) {
+        if (hasUsablePrice(quoteMap.get(`${stockSymbolUpper}.NS`))) {
           preferredExchangeByTicker.set(stockSymbolUpper, '.NS');
-        } else if (quoteMap.has(`${stockSymbolUpper}.BO`)) {
+        } else if (hasUsablePrice(quoteMap.get(`${stockSymbolUpper}.BO`))) {
           preferredExchangeByTicker.set(stockSymbolUpper, '.BO');
         }
       }

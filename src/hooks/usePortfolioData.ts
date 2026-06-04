@@ -28,6 +28,7 @@ interface ResourceCacheEntry<T> {
   data?: T;
   updatedAt?: number;
   promise?: Promise<T>;
+  requestId?: number;
 }
 
 interface UseCachedResourceOptions<T> {
@@ -76,9 +77,12 @@ async function fetchCachedResource<T>({
     return entry.data;
   }
 
-  if (entry.promise) {
+  if (!force && entry.promise) {
     return entry.promise;
   }
+
+  const requestId = (entry.requestId ?? 0) + 1;
+  entry.requestId = requestId;
 
   entry.promise = fetch(url, DEFAULT_FETCH_OPTIONS)
     .then(async (response) => {
@@ -88,12 +92,16 @@ async function fetchCachedResource<T>({
 
       const payload = await response.json();
       const data = transform ? transform(payload) : (payload as T);
-      entry.data = data;
-      entry.updatedAt = Date.now();
+      if (entry.requestId === requestId) {
+        entry.data = data;
+        entry.updatedAt = Date.now();
+      }
       return data;
     })
     .finally(() => {
-      entry.promise = undefined;
+      if (entry.requestId === requestId) {
+        entry.promise = undefined;
+      }
     });
 
   return entry.promise;

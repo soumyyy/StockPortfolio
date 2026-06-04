@@ -24,8 +24,8 @@ export default function Document() {
         <link rel="apple-touch-icon" sizes="167x167" href="/icons/touch-icon-ipad-retina.svg" />
 
         {/* Android PWA Icons */}
-        <link rel="icon" type="image/svg+xml" sizes="32x32" href="/icons/favicon-32x32.svg" />
-        <link rel="icon" type="image/svg+xml" sizes="16x16" href="/icons/favicon-16x16.svg" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
         <link rel="manifest" href="/manifest.json" />
 
         {/* Splash Screens for iOS */}

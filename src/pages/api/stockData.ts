@@ -49,12 +49,21 @@ async function fetchQuotes(symbols: string[]) {
   }
 }
 
+function hasUsablePrice(quote?: QuoteLike) {
+  const price = Number(quote?.regularMarketPrice);
+  return Number.isFinite(price) && price > 0;
+}
+
+function getBestQuote(symbols: string[], quoteMap: Map<string, QuoteLike>) {
+  const quotes = symbols.map((symbol) => quoteMap.get(symbol.toUpperCase())).filter(Boolean) as QuoteLike[];
+  return quotes.find(hasUsablePrice) || quotes[0];
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Holding[]>
 ) {
-  // Set cache headers
-  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
   res.setHeader('Content-Type', 'application/json');
 
   try {
@@ -99,14 +108,15 @@ export default async function handler(
 
     const holdings = Object.entries(holdingsData).map(([ticker, data]: [string, any]): Holding => {
       const tickerUpper = ticker.toUpperCase();
-      const quote = ticker.includes('.')
-        ? quoteMap.get(tickerUpper)
-        : quoteMap.get(`${tickerUpper}.NS`) || quoteMap.get(`${tickerUpper}.BO`);
+      const candidateSymbols = ticker.includes('.')
+        ? [tickerUpper]
+        : [`${tickerUpper}.NS`, `${tickerUpper}.BO`];
+      const quote = getBestQuote(candidateSymbols, quoteMap);
 
       if (!ticker.includes('.')) {
-        if (quoteMap.has(`${tickerUpper}.NS`)) {
+        if (hasUsablePrice(quoteMap.get(`${tickerUpper}.NS`))) {
           preferredExchangeByTicker.set(tickerUpper, '.NS');
-        } else if (quoteMap.has(`${tickerUpper}.BO`)) {
+        } else if (hasUsablePrice(quoteMap.get(`${tickerUpper}.BO`))) {
           preferredExchangeByTicker.set(tickerUpper, '.BO');
         }
       }
@@ -129,9 +139,9 @@ export default async function handler(
         };
       }
 
-      const lastTradedPrice = quote.regularMarketPrice || data.averagePrice;
-      const dailyChange = quote.regularMarketChange || 0;
-      const dailyChangePercentage = quote.regularMarketChangePercent || 0;
+      const lastTradedPrice = quote.regularMarketPrice ?? data.averagePrice;
+      const dailyChange = quote.regularMarketChange ?? 0;
+      const dailyChangePercentage = quote.regularMarketChangePercent ?? 0;
       const unrealizedPL = (lastTradedPrice - data.averagePrice) * data.quantity;
       const unrealizedPLPercentage = ((lastTradedPrice - data.averagePrice) / data.averagePrice) * 100;
 

@@ -2,8 +2,25 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import {
   fetchEdgeConfigItems,
   readHoldingsFromItems,
-  writeHoldingToEdgeConfig,
+  writeHoldingsToEdgeConfig,
 } from '../../lib/edgeConfigHoldings';
+
+function normalizeTickerInput(ticker: string) {
+  return ticker.trim().toUpperCase().replace(/\.BS$/, '.BO');
+}
+
+function getTickerRoot(ticker: string) {
+  return ticker.replace(/\.(NS|BO)$/, '');
+}
+
+function resolveStoredTicker(holdingsData: Record<string, unknown>, ticker: string) {
+  if (holdingsData[ticker]) {
+    return ticker;
+  }
+
+  const tickerRoot = getTickerRoot(ticker);
+  return Object.keys(holdingsData).find((storedTicker) => getTickerRoot(storedTicker) === tickerRoot) || ticker;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -20,20 +37,25 @@ export default async function handler(
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const normalizedTicker = ticker.trim().toUpperCase();
+    const normalizedTicker = normalizeTickerInput(ticker);
     const parsedQuantity = Number(quantity);
     const parsedAveragePrice = Number(averagePrice);
 
-    if (action !== 'delete' && (!Number.isFinite(parsedQuantity) || parsedQuantity === 0)) {
-      return res.status(400).json({ error: 'Quantity must be a non-zero number' });
+    if (action !== 'delete' && !Number.isFinite(parsedQuantity)) {
+      return res.status(400).json({ error: 'Quantity must be a number' });
     }
 
     const items = await fetchEdgeConfigItems();
     const holdingsData = readHoldingsFromItems(items);
-    const existingHolding = holdingsData[normalizedTicker];
+    const storedTicker = resolveStoredTicker(holdingsData, normalizedTicker);
+    const existingHolding = holdingsData[storedTicker];
     let nextHolding = null;
 
     if (action === 'add') {
+      if (parsedQuantity === 0) {
+        return res.status(400).json({ error: 'Quantity must be a non-zero number' });
+      }
+
       if (existingHolding) {
         const existingQuantity = Number(existingHolding.quantity) || 0;
         const existingAverage = Number(existingHolding.averagePrice) || 0;
@@ -78,21 +100,29 @@ export default async function handler(
         };
       }
     } else if (action === 'update') {
-      if (!Number.isFinite(parsedAveragePrice) || parsedQuantity <= 0 || parsedAveragePrice <= 0) {
+      if (parsedQuantity === 0) {
+        nextHolding = null;
+      } else if (!Number.isFinite(parsedAveragePrice) || parsedQuantity < 0 || parsedAveragePrice <= 0) {
         return res.status(400).json({ error: 'Quantity and average price must be positive for update' });
+      } else {
+        nextHolding = {
+          averagePrice: Number(parsedAveragePrice.toFixed(2)),
+          quantity: parsedQuantity
+        };
       }
-
-      nextHolding = {
-        averagePrice: Number(parsedAveragePrice.toFixed(2)),
-        quantity: parsedQuantity
-      };
     } else if (action === 'delete') {
       nextHolding = null;
     } else {
       return res.status(400).json({ error: 'Invalid action' });
     }
 
-    await writeHoldingToEdgeConfig(normalizedTicker, nextHolding);
+    if (nextHolding) {
+      holdingsData[storedTicker] = nextHolding;
+    } else {
+      delete holdingsData[storedTicker];
+    }
+
+    await writeHoldingsToEdgeConfig(holdingsData, items);
 
     res.status(200).json({ 
       success: true, 

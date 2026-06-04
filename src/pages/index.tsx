@@ -99,6 +99,7 @@ export default function Home() {
   const [isSearching, setIsSearching] = useState(false);
   const {
     data: holdings,
+    error: holdingsError,
     isLoading: isHoldingsLoading,
   } = useHoldingsData();
   const {
@@ -331,6 +332,11 @@ export default function Home() {
               <PortfolioSummary holdings={holdings} />
             </Suspense>
           </div>
+          {holdingsError && (
+            <div className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">
+              Holdings could not refresh. Showing cached data if available.
+            </div>
+          )}
           <div className="flex justify-center mt-7">
             <Link href="/holdings" className="px-6 py-2 backdrop-blur-md bg-white/[0.03] hover:bg-white/[0.06] rounded-lg border border-white/[0.06] transition-colors">
               View Holdings

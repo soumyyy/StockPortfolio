@@ -6,24 +6,22 @@ import { join } from 'path';
 const iconsDir = join(process.cwd(), 'public', 'icons');
 mkdirSync(iconsDir, { recursive: true });
 
-// Create a simple SVG icon with black background and cursive "portfolio" text
 const createIconSVG = (size) => {
-  const fontSize = Math.max(size * 0.18, 12); // Larger font size for better visibility
+  const fontSize = Math.max(size * 0.22, 12);
   
   return `
 <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-  <!-- Simple black background -->
-  <rect width="${size}" height="${size}" fill="#0A0A0A" rx="${size * 0.1}"/>
+  <rect width="${size}" height="${size}" fill="#0A0A0A"/>
   
-  <!-- Cursive "portfolio" text -->
   <text x="50%" y="50%" 
-        font-family="cursive, 'Brush Script MT', 'Lucida Handwriting', serif" 
+        font-family="'Snell Roundhand', 'Savoye LET', 'Apple Chancery', cursive" 
         font-size="${fontSize}" 
         font-weight="400" 
         fill="#ffffff" 
         text-anchor="middle" 
         dominant-baseline="middle"
-        letter-spacing="1px">portfolio</text>
+        textLength="${size * 0.72}"
+        lengthAdjust="spacingAndGlyphs">portfolio</text>
 </svg>
 `;
 };
@@ -80,9 +78,9 @@ splashSizes.forEach(({ width, height, name }) => {
   <g transform="translate(${width/2 - 120}, ${height/2 - 120})">
     <rect width="240" height="240" fill="#0A0A0A" rx="24" stroke="#333" stroke-width="2"/>
     
-    <!-- Cursive Portfolio text -->
-    <text x="120" y="140" font-family="cursive, 'Brush Script MT', 'Lucida Handwriting', serif" 
-          font-size="36" font-weight="400" fill="#ffffff" text-anchor="middle">portfolio</text>
+    <text x="120" y="132" font-family="'Snell Roundhand', 'Savoye LET', 'Apple Chancery', cursive" 
+          font-size="52" font-weight="400" fill="#ffffff" text-anchor="middle"
+          textLength="170" lengthAdjust="spacingAndGlyphs">portfolio</text>
   </g>
 </svg>
 `;

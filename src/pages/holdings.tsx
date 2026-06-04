@@ -3,7 +3,7 @@ import { Holding } from '../types/holding';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useHoldingsData, useIndicesData } from '../hooks/usePortfolioData';
-import EditHoldingModal from '../components/EditHoldingModal';
+import EditHoldingModal, { type SaveHoldingData } from '../components/EditHoldingModal';
 
 // Lazy load components for better performance
 const HoldingCard = lazy(() => import('../components/HoldingCard'));
@@ -100,6 +100,7 @@ export default function Holdings() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const {
     data: holdings,
+    error: holdingsError,
     isLoading: isHoldingsLoading,
     refresh: refreshHoldings,
   } = useHoldingsData();
@@ -171,14 +172,14 @@ export default function Holdings() {
     }
   };
 
-  const handleSaveHolding = async (data: { ticker: string; quantity: number; averagePrice: number }) => {
+  const handleSaveHolding = async (data: SaveHoldingData) => {
     try {
       const normalizedTicker = data.ticker.trim().toUpperCase();
       const payload = {
         ticker: normalizedTicker,
         quantity: data.quantity,
         averagePrice: data.averagePrice,
-        action: editModal.isNew ? 'add' : 'update' as 'add' | 'update',
+        action: data.action ?? (editModal.isNew ? 'add' : 'update' as 'add' | 'update'),
       };
 
       const response = await fetch('/api/updateHolding', {
@@ -250,6 +251,11 @@ export default function Holdings() {
         <Suspense fallback={<div className="h-24 bg-white/[0.03] rounded-lg animate-pulse" />}>
           <PortfolioSummary holdings={holdings} />
         </Suspense>
+        {holdingsError && (
+          <div className="rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-100">
+            Holdings could not refresh. Showing cached data if available.
+          </div>
+        )}
         
         {/* Holdings Section Header */}
         <div className="flex items-center justify-between">

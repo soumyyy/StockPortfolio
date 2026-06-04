@@ -18,10 +18,9 @@ if (!process.env.EDGE_CONFIG_ID || !process.env.VERCEL_ACCESS_TOKEN) {
 
 const EDGE_CONFIG_ID = process.env.EDGE_CONFIG_ID;
 const VERCEL_ACCESS_TOKEN = process.env.VERCEL_ACCESS_TOKEN;
-const HOLDING_KEY_PREFIX = 'holding_';
 
-function holdingKeyForTicker(ticker) {
-  return `${HOLDING_KEY_PREFIX}${Buffer.from(ticker.trim().toUpperCase(), 'utf8').toString('base64url')}`;
+function normalizeTicker(ticker) {
+  return ticker.trim().toUpperCase().replace(/\.BS$/, '.BO');
 }
 
 // Read and parse CSV
@@ -49,7 +48,7 @@ try {
       console.warn(`Skipping invalid holding:`, holding);
       continue;
     }
-    holdings[holding.ticker] = {
+    holdings[normalizeTicker(holding.ticker)] = {
       averagePrice: Number(holding.averagePrice),
       quantity: Number(holding.quantity)
     };
@@ -64,12 +63,6 @@ try {
     try {
       console.log('Uploading holdings to Edge Config...');
 
-      const items = Object.entries(holdings).map(([ticker, value]) => ({
-        key: holdingKeyForTicker(ticker),
-        value,
-        operation: 'upsert'
-      }));
-  
       const response = await fetch(`https://api.vercel.com/v1/edge-config/${EDGE_CONFIG_ID}/items`, {
         method: 'PATCH',
         headers: {
@@ -77,7 +70,13 @@ try {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          items
+          items: [
+            {
+              key: 'holdings',
+              value: holdings,
+              operation: 'upsert'
+            }
+          ]
         }),
       });
   

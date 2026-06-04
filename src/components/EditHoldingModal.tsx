@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Holding } from '../types/holding';
 
+export type SaveHoldingData = {
+  ticker: string;
+  quantity: number;
+  averagePrice: number;
+  action?: 'add' | 'update';
+};
+
 interface EditHoldingModalProps {
   isOpen: boolean;
   onClose: () => void;
   holding?: Holding | null;
-  onSave: (data: { ticker: string; quantity: number; averagePrice: number }) => Promise<void>;
+  onSave: (data: SaveHoldingData) => Promise<void>;
   onDelete?: (ticker: string) => Promise<void>;
   isNew?: boolean;
 }
@@ -51,11 +58,59 @@ export default function EditHoldingModal({
     setFormError('');
   }, [holding, isNew]);
 
+  const getPendingLot = () => {
+    const hasPendingLot = additionalLot.quantity.trim() || additionalLot.price.trim();
+    if (!hasPendingLot || isNew) {
+      return undefined;
+    }
+
+    const addQuantity = Number(additionalLot.quantity);
+    const addPrice = Number(additionalLot.price);
+
+    if (!addQuantity || Number.isNaN(addQuantity)) {
+      setFormError('Enter a buy or sell quantity to apply.');
+      return null;
+    }
+
+    const currentQuantity = Number(formData.quantity) || 0;
+    const totalQuantity = currentQuantity + addQuantity;
+
+    if (totalQuantity < 0) {
+      setFormError('Quantity cannot go below zero.');
+      return null;
+    }
+
+    if (addQuantity > 0) {
+      if (!addPrice || addPrice <= 0) {
+        setFormError('Enter a positive price for a purchase lot.');
+        return null;
+      }
+    }
+
+    return {
+      ticker: formData.ticker,
+      quantity: addQuantity,
+      averagePrice: addQuantity > 0 ? addPrice : 0,
+      action: 'add' as const,
+    };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const requiresAveragePrice = !isNew || formData.quantity > 0;
+    const pendingLot = getPendingLot();
+    if (pendingLot === null) {
+      return;
+    }
 
-    if (!formData.ticker.trim() || formData.quantity === 0 || (!isNew && formData.quantity < 0) || (requiresAveragePrice && formData.averagePrice <= 0)) {
+    const dataToSave: SaveHoldingData = pendingLot ?? formData;
+    const isLotDelta = dataToSave.action === 'add';
+    const shouldDeleteExistingHolding = !isNew && !isLotDelta && dataToSave.quantity === 0;
+
+    const requiresAveragePrice = isLotDelta
+      ? dataToSave.quantity > 0
+      : (!shouldDeleteExistingHolding && (!isNew || dataToSave.quantity > 0));
+
+    if (!dataToSave.ticker.trim() || (isNew && dataToSave.quantity === 0) || (!isNew && !isLotDelta && dataToSave.quantity < 0) || (requiresAveragePrice && dataToSave.averagePrice <= 0)) {
       setFormError(
         isNew
           ? 'Enter a ticker and non-zero quantity. Average price is required for buy lots.'
@@ -67,7 +122,14 @@ export default function EditHoldingModal({
     setIsLoading(true);
     setFormError('');
     try {
-      await onSave(formData);
+      if (shouldDeleteExistingHolding) {
+        if (!onDelete) {
+          throw new Error('Delete is not available for this holding');
+        }
+        await onDelete(dataToSave.ticker);
+      } else {
+        await onSave(dataToSave);
+      }
       onClose();
     } catch (error) {
       console.error('Error saving holding:', error);
@@ -104,41 +166,29 @@ export default function EditHoldingModal({
     }
   };
 
-  const handleApplyAdditionalLot = () => {
-    const addQuantity = Number(additionalLot.quantity);
-    const addPrice = Number(additionalLot.price);
-    if (!addQuantity || Number.isNaN(addQuantity)) {
+  const handleApplyAdditionalLot = async () => {
+    const pendingLot = getPendingLot();
+    if (pendingLot === undefined) {
       setFormError('Enter a buy or sell quantity to apply.');
       return;
     }
 
-    const currentQuantity = Number(formData.quantity) || 0;
-    const currentAverage = Number(formData.averagePrice) || 0;
-    let totalQuantity = currentQuantity + addQuantity;
-    if (totalQuantity < 0) {
-      totalQuantity = 0;
+    if (!pendingLot) {
+      return;
     }
 
-    let newAverage = currentAverage;
-
-    if (addQuantity > 0) {
-      if (!addPrice || addPrice <= 0) {
-        setFormError('Enter a positive price for a purchase lot.');
-        return;
-      }
-      const totalValue = currentQuantity * currentAverage + addQuantity * addPrice;
-      newAverage = totalQuantity === 0 ? 0 : totalValue / totalQuantity;
-    } else if (totalQuantity === 0) {
-      newAverage = 0;
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      quantity: totalQuantity,
-      averagePrice: Number(newAverage.toFixed(2))
-    }));
-    setAdditionalLot({ quantity: '', price: '' });
+    setIsLoading(true);
     setFormError('');
+    try {
+      await onSave(pendingLot);
+      setAdditionalLot({ quantity: '', price: '' });
+      onClose();
+    } catch (error) {
+      console.error('Error saving holding lot:', error);
+      setFormError(error instanceof Error ? error.message : 'Failed to save holding lot');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const additionalQuantityValue = Number(additionalLot.quantity);
@@ -294,7 +344,7 @@ export default function EditHoldingModal({
                   disabled={!canApplyAdditionalLot || isLoading}
                   className="px-4 py-2 text-sm bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] rounded-lg text-white/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Apply lot
+                  Save lot
                 </button>
               </div>
             </div>
@@ -356,9 +406,10 @@ export default function EditHoldingModal({
                 isLoading ||
                 isDeleting ||
                 !formData.ticker.trim() ||
-                formData.quantity === 0 ||
+                (isNew && formData.quantity === 0) ||
                 (!isNew && formData.quantity < 0) ||
-                ((!isNew || formData.quantity > 0) && formData.averagePrice <= 0)
+                (!isNew && formData.quantity > 0 && formData.averagePrice <= 0) ||
+                (isNew && formData.quantity > 0 && formData.averagePrice <= 0)
               }
               className="flex-1 px-4 py-2 bg-white/[0.1] hover:bg-white/[0.15] border border-white/[0.06] rounded-lg text-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
