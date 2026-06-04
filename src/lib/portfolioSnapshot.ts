@@ -41,6 +41,14 @@ export interface PortfolioSnapshot {
 const yahooFinance = YahooFinance;
 const preferredExchangeByTicker = new Map<string, ExchangeSuffix>();
 
+function roundToTwo(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Number(value.toFixed(2));
+}
+
 function getPreferredSymbols(ticker: string) {
   const normalizedTicker = ticker.toUpperCase();
 
@@ -138,14 +146,14 @@ export async function getPortfolioHoldings(): Promise<Holding[]> {
       return {
         ticker,
         name: ticker,
-        buyPrice: data.averagePrice,
-        quantity: data.quantity,
-        lastTradedPrice: data.averagePrice,
+        buyPrice: roundToTwo(data.averagePrice),
+        quantity: roundToTwo(data.quantity),
+        lastTradedPrice: roundToTwo(data.averagePrice),
         dailyChange: 0,
         dailyChangePercentage: 0,
         dayRange: 'N/A',
         volume: 0,
-        averageBuyPrice: data.averagePrice,
+        averageBuyPrice: roundToTwo(data.averagePrice),
         unrealizedPL: 0,
         unrealizedPLPercentage: 0,
       };
@@ -160,16 +168,16 @@ export async function getPortfolioHoldings(): Promise<Holding[]> {
     return {
       ticker,
       name: quote.longName || quote.shortName || ticker,
-      buyPrice: data.averagePrice,
-      quantity: data.quantity,
-      lastTradedPrice,
-      dailyChange,
-      dailyChangePercentage,
+      buyPrice: roundToTwo(data.averagePrice),
+      quantity: roundToTwo(data.quantity),
+      lastTradedPrice: roundToTwo(lastTradedPrice),
+      dailyChange: roundToTwo(dailyChange),
+      dailyChangePercentage: roundToTwo(dailyChangePercentage),
       dayRange: `${quote.regularMarketDayLow?.toFixed(2) || 'N/A'}-${quote.regularMarketDayHigh?.toFixed(2) || 'N/A'}`,
       volume: quote.regularMarketVolume || 0,
-      averageBuyPrice: data.averagePrice,
-      unrealizedPL,
-      unrealizedPLPercentage,
+      averageBuyPrice: roundToTwo(data.averagePrice),
+      unrealizedPL: roundToTwo(unrealizedPL),
+      unrealizedPLPercentage: roundToTwo(unrealizedPLPercentage),
     };
   });
 }
@@ -182,9 +190,9 @@ export function createPortfolioSnapshot(holdings: Holding[]): PortfolioSnapshot 
 
     return {
       ...holding,
-      investedValue,
-      currentValue,
-      dailyPL,
+      investedValue: roundToTwo(investedValue),
+      currentValue: roundToTwo(currentValue),
+      dailyPL: roundToTwo(dailyPL),
     };
   });
 
@@ -200,13 +208,13 @@ export function createPortfolioSnapshot(holdings: Holding[]): PortfolioSnapshot 
     currency: 'INR',
     summary: {
       holdingsCount: snapshotHoldings.length,
-      totalQuantity,
-      totalInvested,
-      currentValue,
-      dailyPL,
-      dailyPLPercentage: currentValue > 0 ? dailyPL / currentValue * 100 : 0,
-      overallPL,
-      overallPLPercentage: totalInvested > 0 ? overallPL / totalInvested * 100 : 0,
+      totalQuantity: roundToTwo(totalQuantity),
+      totalInvested: roundToTwo(totalInvested),
+      currentValue: roundToTwo(currentValue),
+      dailyPL: roundToTwo(dailyPL),
+      dailyPLPercentage: roundToTwo(currentValue > 0 ? dailyPL / currentValue * 100 : 0),
+      overallPL: roundToTwo(overallPL),
+      overallPLPercentage: roundToTwo(totalInvested > 0 ? overallPL / totalInvested * 100 : 0),
     },
     holdings: snapshotHoldings,
   };
